@@ -14,6 +14,7 @@ class ResultTable(DataTable):
         Binding("l", "cursor_right", "Right", show=False),
         Binding("g", "scroll_home", "Top", show=False),
         Binding("G", "scroll_end", "Bottom", show=False),
+        Binding("y", "copy_cell", "Copy", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -24,8 +25,19 @@ class ResultTable(DataTable):
 
     def __init__(self, **kwargs) -> None:
         super().__init__(**kwargs)
-        self.cursor_type = "row"
+        self.cursor_type = "cell"
         self.zebra_stripes = True
+
+    def action_copy_cell(self) -> None:
+        try:
+            cell_key = self.coordinate_to_cell_key(self.cursor_coordinate)
+            value = self.get_cell(cell_key.row_key, cell_key.column_key)
+        except Exception:
+            return
+        text = str(value)
+        import subprocess
+        subprocess.run(["pbcopy"], input=text.encode(), check=True)
+        self.notify(f"Copied: {text[:50]}", severity="information")
 
     def load_result(self, result: QueryResult) -> None:
         self.clear(columns=True)
