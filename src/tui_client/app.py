@@ -20,8 +20,8 @@ class TuiClientApp(App):
         self.adapter: PostgresAdapter | None = None
 
     def on_mount(self) -> None:
-        main = MainScreen()
-        self.push_screen(main)
+        self._main_screen = MainScreen()
+        self.push_screen(self._main_screen)
         from tui_client.screens.connect import ConnectionList
         self.push_screen(ConnectionList(), self._on_initial_connect)
 
@@ -50,10 +50,9 @@ class TuiClientApp(App):
             self.adapter = None
             self.notify(f"Connection failed: {e}", severity="error")
             return
-        main = self.query_one(MainScreen)
-        main.adapter = self.adapter
+        self._main_screen.adapter = self.adapter
         self.title = f"tui-client - {config.name}"
-        await main._load_schema()
+        await self._main_screen._load_schema()
 
     async def on_unmount(self) -> None:
         if self.adapter:
