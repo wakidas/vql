@@ -51,7 +51,10 @@ class TuiClientApp(App):
             self.notify(f"Connection failed: {e}", severity="error")
             return
         self._main_screen.adapter = self.adapter
-        self.title = f"tui-client - {config.name}"
+        self.title = "tui-client"
+        detail = f"{config.user}@{config.host}:{config.port}/{config.database}"
+        from tui_client.widgets.db_header import DbHeader
+        self._main_screen.query_one(DbHeader).set_db_name(config.name, detail)
         await self._main_screen._load_schema()
 
     async def on_unmount(self) -> None:

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
 from textual.widgets import DataTable, Footer, Header, Static, Tree
 from psycopg import sql
@@ -11,6 +11,7 @@ from tui_client.db.base import DBAdapter
 from tui_client.widgets.schema_tree import SchemaTree
 from tui_client.widgets.result_table import ResultTable
 from tui_client.widgets.property_panel import PropertyPanel
+from tui_client.widgets.db_header import DbHeader
 
 
 class MainScreen(Screen):
@@ -27,10 +28,13 @@ class MainScreen(Screen):
     MainScreen {
         layout: horizontal;
     }
-    #sidebar {
+    #sidebar-container {
         width: 30;
         dock: left;
         border-right: thick $accent;
+    }
+    #sidebar {
+        width: 1fr;
     }
     #main {
         width: 1fr;
@@ -50,7 +54,9 @@ class MainScreen(Screen):
 
     def compose(self) -> ComposeResult:
         yield Header()
-        yield SchemaTree(id="sidebar")
+        with Vertical(id="sidebar-container"):
+            yield DbHeader(id="db-header")
+            yield SchemaTree(id="sidebar")
         yield ResultTable(id="main")
         yield PropertyPanel(id="property")
         yield Static("No connection", id="status")
