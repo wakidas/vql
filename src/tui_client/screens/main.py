@@ -4,18 +4,20 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal
 from textual.screen import Screen
-from textual.widgets import Footer, Header, Static, Tree
+from textual.widgets import DataTable, Footer, Header, Static, Tree
 from psycopg import sql
 
 from tui_client.db.base import DBAdapter
 from tui_client.widgets.schema_tree import SchemaTree
 from tui_client.widgets.result_table import ResultTable
+from tui_client.widgets.property_panel import PropertyPanel
 
 
 class MainScreen(Screen):
     BINDINGS = [
         Binding("h", "focus_tree", "Tree", show=True),
         Binding("l", "focus_table", "Table", show=True),
+        Binding("semicolon", "focus_property", "Property", show=True),
         Binding("c", "connect", "Connect", show=True),
         Binding("r", "refresh", "Refresh", show=True),
         Binding("q", "quit", "Quit", show=True),
@@ -50,6 +52,7 @@ class MainScreen(Screen):
         yield Header()
         yield SchemaTree(id="sidebar")
         yield ResultTable(id="main")
+        yield PropertyPanel(id="property")
         yield Static("No connection", id="status")
         yield Footer()
 
@@ -77,11 +80,28 @@ class MainScreen(Screen):
             return
         self.query_one(ResultTable).load_result(result)
 
+    def on_data_table_cell_highlighted(self, event: DataTable.CellHighlighted) -> None:
+        table = self.query_one(ResultTable)
+        panel = self.query_one(PropertyPanel)
+        row_idx = event.coordinate.row
+        if row_idx < 0 or not table.columns:
+            panel.clear_properties()
+            return
+        columns = [str(col.label) for col in table.columns.values()]
+        row_data = tuple(
+            table.get_cell_at((row_idx, col_idx))
+            for col_idx in range(len(columns))
+        )
+        panel.update_properties(columns, row_data)
+
     def action_focus_tree(self) -> None:
         self.query_one(SchemaTree).focus()
 
     def action_focus_table(self) -> None:
         self.query_one(ResultTable).focus()
+
+    def action_focus_property(self) -> None:
+        self.query_one(PropertyPanel).focus()
 
     def action_connect(self) -> None:
         from tui_client.screens.connect import ConnectionList

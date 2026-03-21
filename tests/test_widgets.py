@@ -7,7 +7,7 @@ def test_result_table_load_result():
     result = QueryResult(columns=["id", "name"], rows=[(1, "alice"), (2, "bob")])
     # ResultTable needs to be mounted to fully work, but we can test the method exists
     assert hasattr(table, "load_result")
-    assert table.cursor_type == "row"
+    assert table.cursor_type == "cell"
     assert table.zebra_stripes is True
 
 
