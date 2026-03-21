@@ -1,0 +1,27 @@
+[project]
+name = "tui-client"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Shimpei Wakida", email = "shimpei.wakida@gmail.com" }
+]
+requires-python = ">=3.12"
+
+dependencies = [
+    "psycopg[binary]>=3.3.3",
+    "textual>=8.1.1",
+]
+
+[project.scripts]
+tui-client = "tui_client.app:main"
+
+[build-system]
+requires = ["uv_build>=0.10.7,<0.11.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pytest-asyncio>=1.3.0",
+]
