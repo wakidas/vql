@@ -29,6 +29,11 @@ class UpdateResult:
     updated_count: int
 
 
+@dataclass
+class DeleteResult:
+    deleted_count: int
+
+
 class DBAdapter(ABC):
     @abstractmethod
     async def connect(self, **kwargs) -> None: ...
@@ -52,6 +57,15 @@ class DBAdapter(ABC):
         update_columns: list[str],
         update_values: list,
     ) -> UpdateResult: ...
+
+    @abstractmethod
+    async def delete(
+        self,
+        schema: str,
+        table: str,
+        pk_columns: list[str],
+        pk_values: list,
+    ) -> DeleteResult: ...
 
     @abstractmethod
     async def close(self) -> None: ...

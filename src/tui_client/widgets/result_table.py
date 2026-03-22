@@ -17,6 +17,8 @@ class ResultTable(DataTable):
         Binding("G", "scroll_end", "Bottom", show=False),
         Binding("y", "copy_cell", "Copy", show=False),
         Binding("i", "edit_cell", "Edit", show=False),
+        Binding("d", "delete_row", "Delete", show=False),
+        Binding("u", "undo", "Undo", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -38,6 +40,18 @@ class ResultTable(DataTable):
         self.cursor_type = "cell"
         self.zebra_stripes = True
         self.pending_changes: dict[tuple[int, int], str | None] = {}
+        self.pending_deletes: set[int] = set()
+
+    class DeleteRowRequested(Message):
+        def __init__(self, row_idx: int) -> None:
+            super().__init__()
+            self.row_idx = row_idx
+
+    class UndoRequested(Message):
+        def __init__(self, row_idx: int, col_idx: int | None) -> None:
+            super().__init__()
+            self.row_idx = row_idx
+            self.col_idx = col_idx
 
     def action_copy_cell(self) -> None:
         try:
@@ -62,11 +76,38 @@ class ResultTable(DataTable):
             self.EditCellRequested(coord.row, coord.column, column_name, value)
         )
 
+    def action_delete_row(self) -> None:
+        try:
+            coord = self.cursor_coordinate
+        except Exception:
+            return
+        self.post_message(self.DeleteRowRequested(coord.row))
+
+    def action_undo(self) -> None:
+        try:
+            coord = self.cursor_coordinate
+        except Exception:
+            return
+        self.post_message(self.UndoRequested(coord.row, coord.column))
+
+    def add_pending_delete(self, row_idx: int) -> None:
+        if row_idx in self.pending_deletes:
+            self.pending_deletes.discard(row_idx)
+        else:
+            self.pending_deletes.add(row_idx)
+
+    def undo_pending(self, row_idx: int, col_idx: int | None) -> None:
+        if row_idx in self.pending_deletes:
+            self.pending_deletes.discard(row_idx)
+        elif col_idx is not None and (row_idx, col_idx) in self.pending_changes:
+            del self.pending_changes[(row_idx, col_idx)]
+
     def add_pending_change(self, row_idx: int, col_idx: int, value: str | None) -> None:
         self.pending_changes[(row_idx, col_idx)] = value
 
     def clear_pending_changes(self) -> None:
         self.pending_changes = {}
+        self.pending_deletes = set()
 
     def apply_pending_visual(self, row_idx: int, col_idx: int, display_value: str) -> None:
         try:
@@ -75,9 +116,29 @@ class ResultTable(DataTable):
         except Exception:
             pass
 
+    def apply_delete_visual(self, row_idx: int) -> None:
+        try:
+            for col_idx in range(len(self.columns)):
+                cell_key = self.coordinate_to_cell_key((row_idx, col_idx))
+                value = self.get_cell(cell_key.row_key, cell_key.column_key)
+                text = str(value)
+                if not text.startswith("[D] "):
+                    self.update_cell(cell_key.row_key, cell_key.column_key, f"[D] {text}")
+        except Exception:
+            pass
+
+    def restore_row_visual(self, row_idx: int, original_row: tuple) -> None:
+        try:
+            for col_idx in range(len(self.columns)):
+                cell_key = self.coordinate_to_cell_key((row_idx, col_idx))
+                self.update_cell(cell_key.row_key, cell_key.column_key, original_row[col_idx])
+        except Exception:
+            pass
+
     def load_result(self, result: QueryResult) -> None:
         self.clear(columns=True)
         self.pending_changes = {}
+        self.pending_deletes = set()
         if not result.columns:
             return
         self.add_columns(*result.columns)

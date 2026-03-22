@@ -34,3 +34,13 @@ def test_update_result_dataclass():
     from tui_client.db.base import UpdateResult
     r = UpdateResult(updated_count=3)
     assert r.updated_count == 3
+
+
+def test_db_adapter_has_delete_method():
+    assert hasattr(DBAdapter, "delete")
+
+
+def test_delete_result_dataclass():
+    from tui_client.db.base import DeleteResult
+    r = DeleteResult(deleted_count=2)
+    assert r.deleted_count == 2

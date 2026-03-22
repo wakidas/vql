@@ -3,7 +3,7 @@ from __future__ import annotations
 import psycopg
 from psycopg import sql
 
-from .base import DBAdapter, Column, Table, QueryResult, UpdateResult
+from .base import DBAdapter, Column, Table, QueryResult, UpdateResult, DeleteResult
 
 
 class PostgresAdapter(DBAdapter):
@@ -93,6 +93,25 @@ class PostgresAdapter(DBAdapter):
         params = list(update_values) + list(pk_values)
         cur = await self.conn.execute(query, params)
         return UpdateResult(updated_count=cur.rowcount)
+
+    async def delete(
+        self,
+        schema: str,
+        table: str,
+        pk_columns: list[str],
+        pk_values: list,
+    ) -> DeleteResult:
+        where_clause = sql.SQL(" AND ").join(
+            sql.SQL("{} = %s").format(sql.Identifier(col))
+            for col in pk_columns
+        )
+        query = sql.SQL("DELETE FROM {}.{} WHERE {}").format(
+            sql.Identifier(schema),
+            sql.Identifier(table),
+            where_clause,
+        )
+        cur = await self.conn.execute(query, pk_values)
+        return DeleteResult(deleted_count=cur.rowcount)
 
     async def close(self) -> None:
         if self._conn is not None:

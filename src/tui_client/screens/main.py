@@ -13,6 +13,7 @@ from tui_client.widgets.result_table import ResultTable
 from tui_client.widgets.property_panel import PropertyPanel
 from tui_client.widgets.db_header import DbHeader
 from tui_client.screens.edit_modal import EditCellModal, EditResult
+from tui_client.screens.confirm_modal import ConfirmModal
 
 
 class MainScreen(Screen):
@@ -139,6 +140,59 @@ class MainScreen(Screen):
         table.apply_pending_visual(row_idx, col_idx, display)
         self.query_one("#status", Static).update("Unsaved changes (*)")
 
+    def _restore_row(self, table: ResultTable, row_idx: int) -> None:
+        if row_idx >= len(self._original_rows):
+            return
+        original_row = self._original_rows[row_idx]
+        table.restore_row_visual(row_idx, original_row)
+        for col_idx in range(len(table.columns)):
+            if (row_idx, col_idx) in table.pending_changes:
+                value = table.pending_changes[(row_idx, col_idx)]
+                display = "NULL" if value is None else value
+                table.apply_pending_visual(row_idx, col_idx, display)
+
+    def _update_status(self, table: ResultTable) -> None:
+        if not table.pending_changes and not table.pending_deletes:
+            self.query_one("#status", Static).update("Connected")
+        else:
+            self.query_one("#status", Static).update("Unsaved changes (*)")
+
+    def on_result_table_delete_row_requested(self, event: ResultTable.DeleteRowRequested) -> None:
+        pk_cols = [c for c in self._current_columns if c.is_primary_key]
+        if not pk_cols:
+            self.notify("Cannot delete: table has no primary key", severity="error")
+            return
+        if event.row_idx >= len(self._original_rows):
+            return
+        table = self.query_one(ResultTable)
+        table.add_pending_delete(event.row_idx)
+        if event.row_idx in table.pending_deletes:
+            table.apply_delete_visual(event.row_idx)
+        else:
+            self._restore_row(table, event.row_idx)
+        self._update_status(table)
+
+    def on_result_table_undo_requested(self, event: ResultTable.UndoRequested) -> None:
+        table = self.query_one(ResultTable)
+        row_idx = event.row_idx
+        col_idx = event.col_idx
+        if row_idx >= len(self._original_rows):
+            return
+        if row_idx in table.pending_deletes:
+            table.undo_pending(row_idx, None)
+            self._restore_row(table, row_idx)
+        elif col_idx is not None and (row_idx, col_idx) in table.pending_changes:
+            table.undo_pending(row_idx, col_idx)
+            original_value = self._original_rows[row_idx][col_idx]
+            try:
+                cell_key = table.coordinate_to_cell_key((row_idx, col_idx))
+                table.update_cell(cell_key.row_key, cell_key.column_key, original_value)
+            except Exception:
+                pass
+        else:
+            return
+        self._update_status(table)
+
     def action_command_input(self) -> None:
         cmd_input = self.query_one("#command-input", Input)
         cmd_input.add_class("visible")
@@ -167,7 +221,7 @@ class MainScreen(Screen):
 
     async def _save_changes(self) -> None:
         table_widget = self.query_one(ResultTable)
-        if not table_widget.pending_changes:
+        if not table_widget.pending_changes and not table_widget.pending_deletes:
             self.notify("No changes to save", severity="information")
             return
         if self._current_table is None or self.adapter is None:
@@ -176,11 +230,56 @@ class MainScreen(Screen):
         if not pk_cols:
             self.notify("Cannot save: no primary key", severity="error")
             return
+        if table_widget.pending_deletes:
+            delete_count = len(table_widget.pending_deletes)
+            self.app.push_screen(
+                ConfirmModal(message=f"{delete_count}行削除します。よろしいですか？"),
+                callback=lambda confirmed: self._on_confirm_save(confirmed),
+            )
+        else:
+            await self._execute_save()
+
+    def _on_confirm_save(self, confirmed: bool) -> None:
+        if confirmed:
+            self.run_worker(self._execute_save(), exclusive=True)
+
+    def on_worker_state_changed(self, event) -> None:
+        if event.worker.state.name == "ERROR":
+            self.notify(f"Save failed: {event.worker.error}", severity="error")
+
+    async def _execute_save(self) -> None:
+        table_widget = self.query_one(ResultTable)
+        if self._current_table is None or self.adapter is None:
+            return
+        pk_cols = [c for c in self._current_columns if c.is_primary_key]
         col_names = [str(col.label) for col in table_widget.columns.values()]
-        changes_by_row: dict[int, dict[int, str | None]] = {}
-        for (row_idx, col_idx), value in table_widget.pending_changes.items():
-            changes_by_row.setdefault(row_idx, {})[col_idx] = value
+        total_deleted = 0
+        delete_targets = sorted(table_widget.pending_deletes, reverse=True)
+        for row_idx in delete_targets:
+            if row_idx >= len(self._original_rows):
+                continue
+            original_row = self._original_rows[row_idx]
+            pk_values = [original_row[col_names.index(pk.name)] for pk in pk_cols]
+            try:
+                result = await self.adapter.delete(
+                    schema=self._current_table.schema,
+                    table=self._current_table.name,
+                    pk_columns=[pk.name for pk in pk_cols],
+                    pk_values=pk_values,
+                )
+                total_deleted += result.deleted_count
+                table_widget.pending_deletes.discard(row_idx)
+            except Exception as e:
+                self.notify(f"Delete failed: {e}", severity="error")
+                return
+        changes_without_deleted = {
+            (r, c): v for (r, c), v in table_widget.pending_changes.items()
+            if r not in table_widget.pending_deletes
+        }
         total_updated = 0
+        changes_by_row: dict[int, dict[int, str | None]] = {}
+        for (row_idx, col_idx), value in changes_without_deleted.items():
+            changes_by_row.setdefault(row_idx, {})[col_idx] = value
         for row_idx, col_changes in changes_by_row.items():
             original_row = self._original_rows[row_idx]
             pk_values = [original_row[col_names.index(pk.name)] for pk in pk_cols]
@@ -210,7 +309,12 @@ class MainScreen(Screen):
             table_widget.load_result(qr)
         except Exception:
             pass
-        self.notify(f"Saved {total_updated} row(s)", severity="information")
+        parts = []
+        if total_deleted:
+            parts.append(f"Deleted {total_deleted} row(s)")
+        if total_updated:
+            parts.append(f"Updated {total_updated} row(s)")
+        self.notify(", ".join(parts) if parts else "Saved", severity="information")
         self.query_one("#status", Static).update("Connected")
 
     def action_focus_tree(self) -> None:
