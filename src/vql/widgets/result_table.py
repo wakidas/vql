@@ -6,7 +6,7 @@ from textual.binding import Binding
 from textual.message import Message
 from textual.widgets import DataTable
 
-from tui_client.db.base import QueryResult
+from vql.db.base import QueryResult
 
 
 def format_cell_value(value):

@@ -1,4 +1,4 @@
-from tui_client.screens.edit_modal import EditCellModal
+from vql.screens.edit_modal import EditCellModal
 
 
 def test_edit_cell_modal_exists():

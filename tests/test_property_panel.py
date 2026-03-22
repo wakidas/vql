@@ -1,4 +1,4 @@
-from tui_client.widgets.property_panel import PropertyPanel
+from vql.widgets.property_panel import PropertyPanel
 
 
 def test_property_panel_exists():

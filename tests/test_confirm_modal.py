@@ -1,4 +1,4 @@
-from tui_client.screens.confirm_modal import ConfirmModal
+from vql.screens.confirm_modal import ConfirmModal
 
 
 def test_confirm_modal_exists():

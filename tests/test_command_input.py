@@ -2,7 +2,7 @@ import pytest
 from textual.app import App
 from textual.widgets import Static
 
-from tui_client.screens.main import MainScreen
+from vql.screens.main import MainScreen
 
 
 def test_main_screen_has_colon_binding():

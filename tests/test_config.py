@@ -1,7 +1,7 @@
 import tomllib
 from pathlib import Path
 
-from tui_client.db.config import ConnectionConfig, load_connections, save_connection
+from vql.db.config import ConnectionConfig, load_connections, save_connection
 
 
 def test_connection_config_fields():

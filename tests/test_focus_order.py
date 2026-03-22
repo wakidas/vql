@@ -1,10 +1,10 @@
 import pytest
 from textual.binding import Binding
 
-from tui_client.screens.main import MainScreen
-from tui_client.widgets.schema_tree import SchemaTree
-from tui_client.widgets.result_table import ResultTable
-from tui_client.widgets.property_panel import PropertyPanel
+from vql.screens.main import MainScreen
+from vql.widgets.schema_tree import SchemaTree
+from vql.widgets.result_table import ResultTable
+from vql.widgets.property_panel import PropertyPanel
 
 
 def test_main_screen_has_tab_binding():

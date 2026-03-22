@@ -4,7 +4,7 @@ from textual.binding import Binding
 from textual.message import Message
 from textual.widgets import Tree
 
-from tui_client.db.base import DBAdapter, Table
+from vql.db.base import DBAdapter, Table
 
 
 class SchemaTree(Tree[Table]):

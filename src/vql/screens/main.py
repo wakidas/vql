@@ -5,16 +5,19 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Key
 from textual.screen import Screen
-from textual.widgets import DataTable, Header, Input, Static, Tree
+from textual.widgets import DataTable, Header, Input, Static, TextArea, Tree
 from psycopg import sql
 
-from tui_client.db.base import Column, DBAdapter, Table
-from tui_client.widgets.schema_tree import SchemaTree
-from tui_client.widgets.result_table import ResultTable
-from tui_client.widgets.property_panel import PropertyPanel
-from tui_client.widgets.db_header import DbHeader
-from tui_client.screens.edit_modal import EditCellModal, EditResult
-from tui_client.screens.confirm_modal import ConfirmModal
+from vql.db.base import Column, DBAdapter, Table
+from vql.widgets.schema_tree import SchemaTree
+from vql.widgets.result_table import ResultTable
+from vql.widgets.property_panel import PropertyPanel
+from vql.widgets.db_header import DbHeader
+from vql.widgets.tab_bar import TabBar
+from vql.widgets.sql_editor import SqlEditor
+from vql.widgets.sql_history_list import SqlHistoryList
+from vql.screens.edit_modal import EditCellModal, EditResult
+from vql.screens.confirm_modal import ConfirmModal
 
 
 class MainScreen(Screen):
@@ -92,6 +95,18 @@ class MainScreen(Screen):
         color: $text-muted;
         padding: 0 1;
     }
+    #tables-tab {
+        height: 1fr;
+    }
+    #sql-tab {
+        height: 1fr;
+    }
+    #sql-container {
+        width: 1fr;
+    }
+    #sql-result {
+        width: 1fr;
+    }
     """
 
     def __init__(self, adapter: DBAdapter | None = None) -> None:
@@ -105,24 +120,37 @@ class MainScreen(Screen):
         self._command_buffer = ""
         self._footer_text = "; Property   c Connect   r Refresh   q Quit"
         self._current_where: str = ""
+        self._active_tab: str = "tables"
+        self._sql_history: list[str] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
         with Horizontal(id="content"):
             with Vertical(id="sidebar-container"):
                 yield DbHeader(id="db-header")
-                with Horizontal(id="tree-search-container"):
-                    yield Static("Search: ", id="tree-search-label")
-                    search_input = Input(id="tree-search-input")
-                    search_input.can_focus = False
-                    yield search_input
-                yield SchemaTree(id="sidebar")
+                yield TabBar(id="tab-bar")
+                with Vertical(id="tables-tab"):
+                    with Horizontal(id="tree-search-container"):
+                        yield Static("Search: ", id="tree-search-label")
+                        search_input = Input(id="tree-search-input")
+                        search_input.can_focus = False
+                        yield search_input
+                    yield SchemaTree(id="sidebar")
+                sql_tab = Vertical(id="sql-tab")
+                sql_tab.display = False
+                with sql_tab:
+                    yield SqlHistoryList(id="sql-history")
             with Vertical(id="main-container"):
                 yield Input(
                     placeholder="WHERE Enter a WHERE clause to filter the results",
                     id="where-input",
                 )
                 yield ResultTable(id="main")
+            sql_container = Vertical(id="sql-container")
+            sql_container.display = False
+            with sql_container:
+                yield SqlEditor(id="sql-editor")
+                yield ResultTable(id="sql-result")
             yield PropertyPanel(id="property")
         with Vertical(id="bottom-bar"):
             yield Static(self._status_text, id="status")
@@ -189,10 +217,17 @@ class MainScreen(Screen):
             self.notify(f"Query failed: {e}", severity="error")
             return
         self._original_rows = list(result.rows)
-        self.query_one(ResultTable).load_result(result)
+        self.query_one("#main", ResultTable).load_result(result)
+
+    def _active_result_table(self) -> ResultTable:
+        if self._active_tab == "sql":
+            return self.query_one("#sql-result", ResultTable)
+        return self.query_one("#main", ResultTable)
 
     def on_data_table_cell_highlighted(self, event: DataTable.CellHighlighted) -> None:
-        table = self.query_one(ResultTable)
+        table = self._active_result_table()
+        if event.data_table is not table:
+            return
         panel = self.query_one(PropertyPanel)
         row_idx = event.coordinate.row
         if row_idx < 0 or not table.columns:
@@ -218,7 +253,7 @@ class MainScreen(Screen):
     def _on_edit_result(self, result: EditResult | None, row_idx: int, col_idx: int) -> None:
         if result is None:
             return
-        table = self.query_one(ResultTable)
+        table = self.query_one("#main", ResultTable)
         table.add_pending_change(row_idx, col_idx, result.value)
         display = "NULL" if result.value is None else result.value
         table.apply_pending_visual(row_idx, col_idx, display)
@@ -248,7 +283,7 @@ class MainScreen(Screen):
             return
         if event.row_idx >= len(self._original_rows):
             return
-        table = self.query_one(ResultTable)
+        table = self.query_one("#main", ResultTable)
         table.add_pending_delete(event.row_idx)
         if event.row_idx in table.pending_deletes:
             table.apply_delete_visual(event.row_idx)
@@ -257,7 +292,7 @@ class MainScreen(Screen):
         self._update_status(table)
 
     def on_result_table_undo_requested(self, event: ResultTable.UndoRequested) -> None:
-        table = self.query_one(ResultTable)
+        table = self.query_one("#main", ResultTable)
         row_idx = event.row_idx
         col_idx = event.col_idx
         if row_idx >= len(self._original_rows):
@@ -319,8 +354,8 @@ class MainScreen(Screen):
             self.notify(f"Query failed: {e}", severity="error")
             return
         self._original_rows = list(result.rows)
-        self.query_one(ResultTable).load_result(result)
-        self.query_one(ResultTable).focus()
+        self.query_one("#main", ResultTable).load_result(result)
+        self.query_one("#main", ResultTable).focus()
 
     def action_command_input(self) -> None:
         self._enter_command_mode()
@@ -330,7 +365,41 @@ class MainScreen(Screen):
             return False
         return super().check_action(action, parameters)
 
+    def _switch_tab(self, tab: str) -> None:
+        if self._active_tab == tab:
+            return
+        self._active_tab = tab
+        self.query_one(TabBar).set_active(tab)
+        is_tables = tab == "tables"
+        self.query_one("#tables-tab").display = is_tables
+        self.query_one("#sql-tab").display = not is_tables
+        self.query_one("#main-container").display = is_tables
+        self.query_one("#sql-container").display = not is_tables
+        if is_tables:
+            self.query_one(SchemaTree).focus()
+        else:
+            self.query_one(SqlEditor).focus()
+
     async def on_key(self, event: Key) -> None:
+        if not isinstance(self.focused, (Input, TextArea)) and not self._command_mode:
+            if event.key == "1":
+                self._switch_tab("tables")
+                event.prevent_default()
+                event.stop()
+                return
+            elif event.key == "2":
+                self._switch_tab("sql")
+                event.prevent_default()
+                event.stop()
+                return
+
+        if isinstance(self.focused, TextArea) and self.focused.id == "sql-editor":
+            if event.key == "escape":
+                self.query_one("#sql-result", ResultTable).focus()
+                event.prevent_default()
+                event.stop()
+            return
+
         if isinstance(self.focused, Input) and self.focused.id == "tree-search-input":
             if event.key == "escape":
                 search_input = self.query_one("#tree-search-input", Input)
@@ -357,7 +426,7 @@ class MainScreen(Screen):
 
         if isinstance(self.focused, Input) and self.focused.id == "where-input":
             if event.key == "escape":
-                self.query_one(ResultTable).focus()
+                self.query_one("#main", ResultTable).focus()
                 event.prevent_default()
                 event.stop()
             return
@@ -383,7 +452,7 @@ class MainScreen(Screen):
         event.stop()
 
     async def _save_changes(self) -> None:
-        table_widget = self.query_one(ResultTable)
+        table_widget = self.query_one("#main", ResultTable)
         if not table_widget.pending_changes and not table_widget.pending_deletes:
             self.notify("No changes to save", severity="information")
             return
@@ -411,7 +480,7 @@ class MainScreen(Screen):
             self.notify(f"Save failed: {event.worker.error}", severity="error")
 
     async def _execute_save(self) -> None:
-        table_widget = self.query_one(ResultTable)
+        table_widget = self.query_one("#main", ResultTable)
         if self._current_table is None or self.adapter is None:
             return
         pk_cols = [c for c in self._current_columns if c.is_primary_key]
@@ -477,11 +546,37 @@ class MainScreen(Screen):
         self.notify(", ".join(parts) if parts else "Saved", severity="information")
         self._set_status_text("Connected")
 
+    async def on_sql_editor_execute_requested(self, event: SqlEditor.ExecuteRequested) -> None:
+        if self.adapter is None:
+            self.notify("Not connected", severity="error")
+            return
+        try:
+            result = await self.adapter.execute(event.sql_text)
+        except Exception as e:
+            self.notify(f"Query failed: {e}", severity="error")
+            return
+        self._sql_history.append(event.sql_text)
+        self.query_one(SqlHistoryList).add_entry(event.sql_text)
+        self.query_one("#sql-result", ResultTable).load_result(result)
+        self._set_status_text(f"Rows: {len(result.rows)}")
+
+    def on_sql_history_list_selected(self, event: SqlHistoryList.Selected) -> None:
+        history = self.query_one(SqlHistoryList)
+        sql_text = history.get_selected_sql()
+        if sql_text is not None:
+            editor = self.query_one(SqlEditor)
+            editor.clear()
+            editor.insert(sql_text)
+            editor.focus()
+
     def action_focus_tree(self) -> None:
-        self.query_one(SchemaTree).focus()
+        if self._active_tab == "tables":
+            self.query_one(SchemaTree).focus()
+        else:
+            self.query_one(SqlHistoryList).focus()
 
     def action_focus_table(self) -> None:
-        self.query_one(ResultTable).focus()
+        self._active_result_table().focus()
 
     def action_focus_property(self) -> None:
         self.query_one(PropertyPanel).focus()
@@ -508,7 +603,7 @@ class MainScreen(Screen):
         self.query_one(order[prev_idx]).focus()
 
     def action_connect(self) -> None:
-        from tui_client.screens.connect import ConnectionList
+        from vql.screens.connect import ConnectionList
         self.app.push_screen(ConnectionList(), self._on_connect)
 
     def _on_connect(self, config) -> None:

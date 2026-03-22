@@ -1,6 +1,6 @@
-# tui-client
+# vql
 
-PostgreSQL用TUIクライアント。ターミナルからPostgreSQLデータベースを操作できるTUIアプリケーションです。
+Vim風キーバインドを搭載したTUIの軽量DBクライアント。
 
 [Textual](https://github.com/Textualize/textual) フレームワークで構築されています。
 
@@ -22,15 +22,15 @@ PostgreSQL用TUIクライアント。ターミナルからPostgreSQLデータベ
 ### セットアップ
 
 ```bash
-git clone https://github.com/wakidas/tui-client.git
-cd tui-client
+git clone https://github.com/wakidas/vql.git
+cd vql
 uv sync
 ```
 
 ## 使い方
 
 ```bash
-uv run tui-client
+uv run vql
 ```
 
 起動すると接続先の選択画面が表示されます。PostgreSQLの接続情報を入力して接続してください。

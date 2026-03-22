@@ -2,8 +2,8 @@ import pytest
 from textual.app import App
 from textual.widgets import Input, Static
 
-from tui_client.db.base import Table
-from tui_client.screens.main import MainScreen
+from vql.db.base import Table
+from vql.screens.main import MainScreen
 
 
 class SearchTestApp(App[None]):
@@ -44,7 +44,7 @@ async def test_slash_focuses_where_input():
         await pilot.pause()
         screen = app.screen
 
-        from tui_client.widgets.result_table import ResultTable
+        from vql.widgets.result_table import ResultTable
         screen.query_one(ResultTable).focus()
         screen._current_table = Table(name="users", schema="public")
         await pilot.press("slash")

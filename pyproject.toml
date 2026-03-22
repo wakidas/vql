@@ -1,13 +1,17 @@
 [project]
-name = "tui-client"
+name = "vql"
 version = "0.1.0"
-description = "PostgreSQL用TUIクライアント"
+description = "Vim風キーバインドを搭載したTUIの軽量DBクライアント"
 readme = "README.md"
 license = { text = "MIT" }
 authors = [
     { name = "Shimpei Wakida", email = "shimpei.wakida@gmail.com" }
 ]
 requires-python = ">=3.12"
+dependencies = [
+    "psycopg[binary]>=3.3.3",
+    "textual>=8.1.1",
+]
 classifiers = [
     "License :: OSI Approved :: MIT License",
     "Programming Language :: Python :: 3",
@@ -15,15 +19,10 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/wakidas/tui-client"
-
-dependencies = [
-    "psycopg[binary]>=3.3.3",
-    "textual>=8.1.1",
-]
+Repository = "https://github.com/wakidas/vql"
 
 [project.scripts]
-tui-client = "tui_client.app:main"
+vql = "vql.app:main"
 
 [build-system]
 requires = ["uv_build>=0.10.7,<0.11.0"]

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field, asdict
 from pathlib import Path
 
 
-DEFAULT_CONFIG_PATH = Path.home() / ".config" / "tui-client" / "connections.toml"
+DEFAULT_CONFIG_PATH = Path.home() / ".config" / "vql" / "connections.toml"
 
 
 @dataclass

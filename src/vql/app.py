@@ -2,13 +2,13 @@ from __future__ import annotations
 
 from textual.app import App
 
-from tui_client.db.config import ConnectionConfig
-from tui_client.db.postgres import PostgresAdapter
-from tui_client.screens.main import MainScreen
+from vql.db.config import ConnectionConfig
+from vql.db.postgres import PostgresAdapter
+from vql.screens.main import MainScreen
 
 
 class TuiClientApp(App):
-    TITLE = "tui-client"
+    TITLE = "vql"
     CSS = """
     Screen {
         background: $surface;
@@ -22,7 +22,7 @@ class TuiClientApp(App):
     def on_mount(self) -> None:
         self._main_screen = MainScreen()
         self.push_screen(self._main_screen)
-        from tui_client.screens.connect import ConnectionList
+        from vql.screens.connect import ConnectionList
         self.push_screen(ConnectionList(), self._on_initial_connect)
 
     def _on_initial_connect(self, config: ConnectionConfig | None) -> None:
@@ -51,9 +51,9 @@ class TuiClientApp(App):
             self.notify(f"Connection failed: {e}", severity="error")
             return
         self._main_screen.adapter = self.adapter
-        self.title = "tui-client"
+        self.title = "vql"
         detail = f"{config.user}@{config.host}:{config.port}/{config.database}"
-        from tui_client.widgets.db_header import DbHeader
+        from vql.widgets.db_header import DbHeader
         self._main_screen.query_one(DbHeader).set_db_name(config.name, detail)
         await self._main_screen._load_schema()
 

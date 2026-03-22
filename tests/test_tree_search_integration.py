@@ -2,10 +2,10 @@ import pytest
 from textual.app import App
 from textual.widgets import Input, Static
 
-from tui_client.db.base import Table
-from tui_client.screens.main import MainScreen
-from tui_client.widgets.schema_tree import SchemaTree
-from tui_client.widgets.result_table import ResultTable
+from vql.db.base import Table
+from vql.screens.main import MainScreen
+from vql.widgets.schema_tree import SchemaTree
+from vql.widgets.result_table import ResultTable
 
 
 class TreeSearchTestApp(App[None]):

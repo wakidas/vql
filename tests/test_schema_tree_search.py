@@ -2,8 +2,8 @@ import pytest
 from textual.app import App, ComposeResult
 from textual.widgets import Input
 
-from tui_client.db.base import Table
-from tui_client.widgets.schema_tree import SchemaTree
+from vql.db.base import Table
+from vql.widgets.schema_tree import SchemaTree
 
 
 class SchemaTreeTestApp(App[None]):

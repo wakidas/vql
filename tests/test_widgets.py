@@ -1,7 +1,7 @@
 from datetime import datetime, date, time
 
-from tui_client.db.base import QueryResult
-from tui_client.widgets.result_table import ResultTable, format_cell_value
+from vql.db.base import QueryResult
+from vql.widgets.result_table import ResultTable, format_cell_value
 
 
 def test_result_table_load_result():

@@ -1,4 +1,4 @@
-from tui_client.widgets.db_header import DbHeader
+from vql.widgets.db_header import DbHeader
 
 
 def test_db_header_default_text():

@@ -1,6 +1,6 @@
 import pytest
 
-from tui_client.db.base import DBAdapter, Column, Table, QueryResult
+from vql.db.base import DBAdapter, Column, Table, QueryResult
 
 
 def test_db_adapter_is_abstract():
@@ -31,7 +31,7 @@ def test_db_adapter_has_update_method():
 
 
 def test_update_result_dataclass():
-    from tui_client.db.base import UpdateResult
+    from vql.db.base import UpdateResult
     r = UpdateResult(updated_count=3)
     assert r.updated_count == 3
 
@@ -41,6 +41,6 @@ def test_db_adapter_has_delete_method():
 
 
 def test_delete_result_dataclass():
-    from tui_client.db.base import DeleteResult
+    from vql.db.base import DeleteResult
     r = DeleteResult(deleted_count=2)
     assert r.deleted_count == 2

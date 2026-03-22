@@ -6,7 +6,7 @@ from textual.containers import Vertical, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label, Button, Static
 
-from tui_client.db.config import ConnectionConfig, load_connections, save_connection
+from vql.db.config import ConnectionConfig, load_connections, save_connection
 
 
 class ConnectionList(ModalScreen[ConnectionConfig | None]):
