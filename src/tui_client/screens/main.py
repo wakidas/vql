@@ -200,6 +200,7 @@ class MainScreen(Screen):
         cmd_input.add_class("visible")
         cmd_input.value = ""
         cmd_input.focus()
+        self.query_one("#status", Static).display = False
 
     async def on_input_submitted(self, event: Input.Submitted) -> None:
         if event.input.id != "command-input":
@@ -208,6 +209,7 @@ class MainScreen(Screen):
         cmd_input = self.query_one("#command-input", Input)
         cmd_input.remove_class("visible")
         cmd_input.value = ""
+        self.query_one("#status", Static).display = True
         self.query_one(ResultTable).focus()
         if cmd == "w":
             await self._save_changes()
@@ -217,6 +219,7 @@ class MainScreen(Screen):
         if cmd_input.has_class("visible") and event.key == "escape":
             cmd_input.remove_class("visible")
             cmd_input.value = ""
+            self.query_one("#status", Static).display = True
             self.query_one(ResultTable).focus()
             event.prevent_default()
             event.stop()
