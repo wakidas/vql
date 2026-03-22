@@ -24,7 +24,7 @@ class ConnectionList(ModalScreen[ConnectionConfig | None]):
     ConnectionList > Vertical {
         width: 60;
         max-height: 20;
-        border: thick $accent;
+        border: solid $accent;
         background: $surface;
         padding: 1 2;
     }
@@ -113,7 +113,7 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
     }
     NewConnectionForm > Vertical {
         width: 60;
-        border: thick $accent;
+        border: solid $accent;
         background: $surface;
         padding: 1 2;
     }

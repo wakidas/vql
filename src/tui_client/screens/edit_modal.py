@@ -29,7 +29,7 @@ class EditCellModal(ModalScreen[EditResult | None]):
         width: 60;
         height: auto;
         max-height: 16;
-        border: thick $accent;
+        border: solid $accent;
         background: $surface;
         padding: 1 2;
     }

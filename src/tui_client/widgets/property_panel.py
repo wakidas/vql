@@ -17,13 +17,13 @@ class PropertyPanel(VerticalScroll):
     PropertyPanel {
         width: 40;
         dock: right;
-        border-left: thick $accent;
+        border-left: solid $accent;
     }
     PropertyPanel .prop-item {
         height: auto;
         margin: 0;
         padding: 0 1;
-        border: dashed $accent;
+        border: solid $accent;
     }
     PropertyPanel .prop-name {
         color: $text-muted;

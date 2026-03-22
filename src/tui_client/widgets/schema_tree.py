@@ -16,11 +16,10 @@ class SchemaTree(Tree[Table]):
 
     def __init__(self, **kwargs) -> None:
         super().__init__("Tables", **kwargs)
-        self.show_root = False
 
     async def load_tables(self, adapter: DBAdapter) -> None:
         self.clear()
         tables = await adapter.get_tables("public")
         for table in tables:
-            self.root.add_leaf(table.name, data=table)
+            self.root.add_leaf(f"\U0001f5c3 {table.name}", data=table)
         self.root.expand()

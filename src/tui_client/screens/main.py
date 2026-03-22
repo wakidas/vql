@@ -44,7 +44,7 @@ class MainScreen(Screen):
     }
     #sidebar-container {
         width: 30;
-        border-right: thick $accent;
+        border-right: solid $accent;
     }
     #sidebar {
         width: 1fr;
