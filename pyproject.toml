@@ -1,12 +1,21 @@
 [project]
 name = "tui-client"
 version = "0.1.0"
-description = "Add your description here"
+description = "PostgreSQL用TUIクライアント"
 readme = "README.md"
+license = { text = "MIT" }
 authors = [
     { name = "Shimpei Wakida", email = "shimpei.wakida@gmail.com" }
 ]
 requires-python = ">=3.12"
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Repository = "https://github.com/wakidas/tui-client"
 
 dependencies = [
     "psycopg[binary]>=3.3.3",
