@@ -4,14 +4,15 @@ from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Static, Tree
+from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
 from psycopg import sql
 
-from tui_client.db.base import DBAdapter
+from tui_client.db.base import Column, DBAdapter, Table
 from tui_client.widgets.schema_tree import SchemaTree
 from tui_client.widgets.result_table import ResultTable
 from tui_client.widgets.property_panel import PropertyPanel
 from tui_client.widgets.db_header import DbHeader
+from tui_client.screens.edit_modal import EditCellModal, EditResult
 
 
 class MainScreen(Screen):
@@ -22,6 +23,7 @@ class MainScreen(Screen):
         Binding("c", "connect", "Connect", show=True),
         Binding("r", "refresh", "Refresh", show=True),
         Binding("q", "quit", "Quit", show=True),
+        Binding("colon", "command_input", "Command", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -46,11 +48,22 @@ class MainScreen(Screen):
         color: $text;
         padding: 0 1;
     }
+    #command-input {
+        dock: bottom;
+        height: 1;
+        display: none;
+    }
+    #command-input.visible {
+        display: block;
+    }
     """
 
     def __init__(self, adapter: DBAdapter | None = None) -> None:
         super().__init__()
         self.adapter = adapter
+        self._current_table: Table | None = None
+        self._current_columns: list[Column] = []
+        self._original_rows: list[tuple] = []
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -59,6 +72,7 @@ class MainScreen(Screen):
             yield SchemaTree(id="sidebar")
         yield ResultTable(id="main")
         yield PropertyPanel(id="property")
+        yield Input(placeholder=":", id="command-input")
         yield Static("No connection", id="status")
         yield Footer()
 
@@ -75,6 +89,11 @@ class MainScreen(Screen):
         table = event.node.data
         if table is None or self.adapter is None:
             return
+        self._current_table = table
+        try:
+            self._current_columns = await self.adapter.get_columns(table.schema, table.name)
+        except Exception:
+            self._current_columns = []
         query = sql.SQL("SELECT * FROM {}.{} LIMIT 100").format(
             sql.Identifier(table.schema),
             sql.Identifier(table.name),
@@ -84,6 +103,7 @@ class MainScreen(Screen):
         except Exception as e:
             self.notify(f"Query failed: {e}", severity="error")
             return
+        self._original_rows = list(result.rows)
         self.query_one(ResultTable).load_result(result)
 
     def on_data_table_cell_highlighted(self, event: DataTable.CellHighlighted) -> None:
@@ -100,6 +120,99 @@ class MainScreen(Screen):
         )
         panel.update_properties(columns, row_data)
 
+    def on_result_table_edit_cell_requested(self, event: ResultTable.EditCellRequested) -> None:
+        pk_cols = [c for c in self._current_columns if c.is_primary_key]
+        if not pk_cols:
+            self.notify("Cannot edit: table has no primary key", severity="error")
+            return
+        self.app.push_screen(
+            EditCellModal(column_name=event.column_name, current_value=event.current_value),
+            callback=lambda result: self._on_edit_result(result, event.row_idx, event.col_idx),
+        )
+
+    def _on_edit_result(self, result: EditResult | None, row_idx: int, col_idx: int) -> None:
+        if result is None:
+            return
+        table = self.query_one(ResultTable)
+        table.add_pending_change(row_idx, col_idx, result.value)
+        display = "NULL" if result.value is None else result.value
+        table.apply_pending_visual(row_idx, col_idx, display)
+        self.query_one("#status", Static).update("Unsaved changes (*)")
+
+    def action_command_input(self) -> None:
+        cmd_input = self.query_one("#command-input", Input)
+        cmd_input.add_class("visible")
+        cmd_input.value = ""
+        cmd_input.focus()
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "command-input":
+            return
+        cmd = event.value.strip()
+        cmd_input = self.query_one("#command-input", Input)
+        cmd_input.remove_class("visible")
+        cmd_input.value = ""
+        self.query_one(ResultTable).focus()
+        if cmd == "w":
+            await self._save_changes()
+
+    def on_key(self, event) -> None:
+        cmd_input = self.query_one("#command-input", Input)
+        if cmd_input.has_class("visible") and event.key == "escape":
+            cmd_input.remove_class("visible")
+            cmd_input.value = ""
+            self.query_one(ResultTable).focus()
+            event.prevent_default()
+            event.stop()
+
+    async def _save_changes(self) -> None:
+        table_widget = self.query_one(ResultTable)
+        if not table_widget.pending_changes:
+            self.notify("No changes to save", severity="information")
+            return
+        if self._current_table is None or self.adapter is None:
+            return
+        pk_cols = [c for c in self._current_columns if c.is_primary_key]
+        if not pk_cols:
+            self.notify("Cannot save: no primary key", severity="error")
+            return
+        col_names = [str(col.label) for col in table_widget.columns.values()]
+        changes_by_row: dict[int, dict[int, str | None]] = {}
+        for (row_idx, col_idx), value in table_widget.pending_changes.items():
+            changes_by_row.setdefault(row_idx, {})[col_idx] = value
+        total_updated = 0
+        for row_idx, col_changes in changes_by_row.items():
+            original_row = self._original_rows[row_idx]
+            pk_values = [original_row[col_names.index(pk.name)] for pk in pk_cols]
+            update_columns = [col_names[ci] for ci in col_changes]
+            update_values = list(col_changes.values())
+            try:
+                result = await self.adapter.update(
+                    schema=self._current_table.schema,
+                    table=self._current_table.name,
+                    pk_columns=[pk.name for pk in pk_cols],
+                    pk_values=pk_values,
+                    update_columns=update_columns,
+                    update_values=update_values,
+                )
+                total_updated += result.updated_count
+            except Exception as e:
+                self.notify(f"Update failed: {e}", severity="error")
+                return
+        table_widget.clear_pending_changes()
+        query = sql.SQL("SELECT * FROM {}.{} LIMIT 100").format(
+            sql.Identifier(self._current_table.schema),
+            sql.Identifier(self._current_table.name),
+        )
+        try:
+            qr = await self.adapter.execute(query)
+            self._original_rows = list(qr.rows)
+            table_widget.load_result(qr)
+        except Exception:
+            pass
+        self.notify(f"Saved {total_updated} row(s)", severity="information")
+        self.query_one("#status", Static).update("Connected")
+
     def action_focus_tree(self) -> None:
         self.query_one(SchemaTree).focus()
 
@@ -108,6 +221,27 @@ class MainScreen(Screen):
 
     def action_focus_property(self) -> None:
         self.query_one(PropertyPanel).focus()
+
+    def _focus_order(self) -> list[type]:
+        return [SchemaTree, ResultTable, PropertyPanel]
+
+    def action_focus_next(self) -> None:
+        order = self._focus_order()
+        try:
+            idx = next(i for i, cls in enumerate(order) if isinstance(self.focused, cls))
+            next_idx = (idx + 1) % len(order)
+        except (StopIteration, TypeError):
+            next_idx = 0
+        self.query_one(order[next_idx]).focus()
+
+    def action_focus_previous(self) -> None:
+        order = self._focus_order()
+        try:
+            idx = next(i for i, cls in enumerate(order) if isinstance(self.focused, cls))
+            prev_idx = (idx - 1) % len(order)
+        except (StopIteration, TypeError):
+            prev_idx = 0
+        self.query_one(order[prev_idx]).focus()
 
     def action_connect(self) -> None:
         from tui_client.screens.connect import ConnectionList

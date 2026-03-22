@@ -3,7 +3,7 @@ from __future__ import annotations
 import psycopg
 from psycopg import sql
 
-from .base import DBAdapter, Column, Table, QueryResult
+from .base import DBAdapter, Column, Table, QueryResult, UpdateResult
 
 
 class PostgresAdapter(DBAdapter):
@@ -66,6 +66,33 @@ class PostgresAdapter(DBAdapter):
         columns = [desc[0] for desc in cur.description]
         rows = await cur.fetchall()
         return QueryResult(columns=columns, rows=[tuple(row) for row in rows])
+
+    async def update(
+        self,
+        schema: str,
+        table: str,
+        pk_columns: list[str],
+        pk_values: list,
+        update_columns: list[str],
+        update_values: list,
+    ) -> UpdateResult:
+        set_clause = sql.SQL(", ").join(
+            sql.SQL("{} = %s").format(sql.Identifier(col))
+            for col in update_columns
+        )
+        where_clause = sql.SQL(" AND ").join(
+            sql.SQL("{} = %s").format(sql.Identifier(col))
+            for col in pk_columns
+        )
+        query = sql.SQL("UPDATE {}.{} SET {} WHERE {}").format(
+            sql.Identifier(schema),
+            sql.Identifier(table),
+            set_clause,
+            where_clause,
+        )
+        params = list(update_values) + list(pk_values)
+        cur = await self.conn.execute(query, params)
+        return UpdateResult(updated_count=cur.rowcount)
 
     async def close(self) -> None:
         if self._conn is not None:

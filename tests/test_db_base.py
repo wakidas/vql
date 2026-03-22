@@ -24,3 +24,13 @@ def test_query_result():
     result = QueryResult(columns=["id", "name"], rows=[(1, "alice"), (2, "bob")])
     assert len(result.rows) == 2
     assert result.columns == ["id", "name"]
+
+
+def test_db_adapter_has_update_method():
+    assert hasattr(DBAdapter, "update")
+
+
+def test_update_result_dataclass():
+    from tui_client.db.base import UpdateResult
+    r = UpdateResult(updated_count=3)
+    assert r.updated_count == 3

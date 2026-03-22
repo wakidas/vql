@@ -24,6 +24,11 @@ class QueryResult:
     rows: list[tuple]
 
 
+@dataclass
+class UpdateResult:
+    updated_count: int
+
+
 class DBAdapter(ABC):
     @abstractmethod
     async def connect(self, **kwargs) -> None: ...
@@ -36,6 +41,17 @@ class DBAdapter(ABC):
 
     @abstractmethod
     async def execute(self, query) -> QueryResult: ...
+
+    @abstractmethod
+    async def update(
+        self,
+        schema: str,
+        table: str,
+        pk_columns: list[str],
+        pk_values: list,
+        update_columns: list[str],
+        update_values: list,
+    ) -> UpdateResult: ...
 
     @abstractmethod
     async def close(self) -> None: ...
