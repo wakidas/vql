@@ -49,6 +49,13 @@ class MainScreen(Screen):
     #sidebar {
         width: 1fr;
     }
+    #tree-search-input {
+        display: none;
+        height: 1;
+        background: $surface;
+        border: none;
+        padding: 0 1;
+    }
     #main-container {
         width: 1fr;
     }
@@ -92,6 +99,11 @@ class MainScreen(Screen):
         with Horizontal(id="content"):
             with Vertical(id="sidebar-container"):
                 yield DbHeader(id="db-header")
+                yield Input(
+                    placeholder="Search:",
+                    id="tree-search-input",
+                    disabled=True,
+                )
                 yield SchemaTree(id="sidebar")
             with Vertical(id="main-container"):
                 yield Input(
@@ -253,6 +265,31 @@ class MainScreen(Screen):
             return
         self._update_status(table)
 
+    def _show_tree_search(self) -> None:
+        search_input = self.query_one("#tree-search-input", Input)
+        search_input.disabled = False
+        search_input.display = True
+        search_input.value = ""
+        search_input.focus()
+
+    def _hide_tree_search(self, *, reset_filter: bool = False) -> None:
+        search_input = self.query_one("#tree-search-input", Input)
+        search_input.display = False
+        search_input.disabled = True
+        if reset_filter:
+            search_input.value = ""
+        self.query_one(SchemaTree).focus()
+
+    def on_schema_tree_search_mode_changed(self, event: SchemaTree.SearchModeChanged) -> None:
+        if event.active:
+            self._show_tree_search()
+        else:
+            self._hide_tree_search()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        if event.input.id == "tree-search-input":
+            self.query_one(SchemaTree).filter_tables(event.value)
+
     def action_search(self) -> None:
         if self._current_table is None:
             return
@@ -287,6 +324,23 @@ class MainScreen(Screen):
         return super().check_action(action, parameters)
 
     async def on_key(self, event: Key) -> None:
+        if isinstance(self.focused, Input) and self.focused.id == "tree-search-input":
+            if event.key == "escape":
+                self.query_one(SchemaTree).filter_tables("")
+                self._hide_tree_search(reset_filter=True)
+                event.prevent_default()
+                event.stop()
+            elif event.key == "enter":
+                self._hide_tree_search()
+                tree = self.query_one(SchemaTree)
+                leaves = [n for n in tree.root.children if n.data is not None]
+                if leaves:
+                    tree.select_node(leaves[0])
+                    tree.scroll_to_node(leaves[0])
+                event.prevent_default()
+                event.stop()
+            return
+
         if isinstance(self.focused, Input) and self.focused.id == "where-input":
             if event.key == "escape":
                 self.query_one(ResultTable).focus()

@@ -37,12 +37,15 @@ async def test_where_input_is_always_visible():
 
 @pytest.mark.asyncio
 async def test_slash_focuses_where_input():
+    """When not on SchemaTree, slash should focus where-input."""
     app = SearchTestApp()
 
     async with app.run_test() as pilot:
         await pilot.pause()
         screen = app.screen
 
+        from tui_client.widgets.result_table import ResultTable
+        screen.query_one(ResultTable).focus()
         screen._current_table = Table(name="users", schema="public")
         await pilot.press("slash")
 
