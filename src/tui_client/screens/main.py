@@ -3,8 +3,9 @@ from __future__ import annotations
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
+from textual.events import Key
 from textual.screen import Screen
-from textual.widgets import DataTable, Footer, Header, Input, Static, Tree
+from textual.widgets import DataTable, Header, Static, Tree
 from psycopg import sql
 
 from tui_client.db.base import Column, DBAdapter, Table
@@ -31,11 +32,17 @@ class MainScreen(Screen):
 
     DEFAULT_CSS = """
     MainScreen {
+        layout: vertical;
+    }
+    #content {
+        height: 1fr;
         layout: horizontal;
+    }
+    #bottom-bar {
+        height: 2;
     }
     #sidebar-container {
         width: 30;
-        dock: left;
         border-right: thick $accent;
     }
     #sidebar {
@@ -45,19 +52,16 @@ class MainScreen(Screen):
         width: 1fr;
     }
     #status {
-        dock: bottom;
         height: 1;
         background: $accent;
         color: $text;
         padding: 0 1;
     }
-    #command-input {
-        dock: bottom;
+    #footer-bar {
         height: 1;
-        display: none;
-    }
-    #command-input.visible {
-        display: block;
+        background: $panel;
+        color: $text-muted;
+        padding: 0 1;
     }
     """
 
@@ -67,26 +71,56 @@ class MainScreen(Screen):
         self._current_table: Table | None = None
         self._current_columns: list[Column] = []
         self._original_rows: list[tuple] = []
+        self._status_text = "No connection"
+        self._command_mode = False
+        self._command_buffer = ""
+        self._footer_text = "; Property   c Connect   r Refresh   q Quit"
 
     def compose(self) -> ComposeResult:
         yield Header()
-        with Vertical(id="sidebar-container"):
-            yield DbHeader(id="db-header")
-            yield SchemaTree(id="sidebar")
-        yield ResultTable(id="main")
-        yield PropertyPanel(id="property")
-        yield Input(placeholder=":", id="command-input")
-        yield Static("No connection", id="status")
-        yield Footer()
+        with Horizontal(id="content"):
+            with Vertical(id="sidebar-container"):
+                yield DbHeader(id="db-header")
+                yield SchemaTree(id="sidebar")
+            yield ResultTable(id="main")
+            yield PropertyPanel(id="property")
+        with Vertical(id="bottom-bar"):
+            yield Static(self._status_text, id="status")
+            yield Static(self._footer_text, id="footer-bar")
 
     async def on_mount(self) -> None:
         if self.adapter:
             await self._load_schema()
 
+    def _status_widget(self) -> Static:
+        return self.query_one("#status", Static)
+
+    def _set_status_text(self, text: str) -> None:
+        self._status_text = text
+        if not self._command_mode:
+            self._status_widget().update(text)
+
+    def _render_command_line(self) -> None:
+        self._status_widget().update(f":{self._command_buffer}")
+
+    def _enter_command_mode(self) -> None:
+        if self._command_mode:
+            return
+        self._command_mode = True
+        self._command_buffer = ""
+        self._render_command_line()
+
+    def _exit_command_mode(self) -> None:
+        if not self._command_mode:
+            return
+        self._command_mode = False
+        self._command_buffer = ""
+        self._status_widget().update(self._status_text)
+
     async def _load_schema(self) -> None:
         tree = self.query_one(SchemaTree)
         await tree.load_tables(self.adapter)
-        self.query_one("#status", Static).update(f"Connected")
+        self._set_status_text("Connected")
 
     async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         table = event.node.data
@@ -140,7 +174,7 @@ class MainScreen(Screen):
         table.add_pending_change(row_idx, col_idx, result.value)
         display = "NULL" if result.value is None else result.value
         table.apply_pending_visual(row_idx, col_idx, display)
-        self.query_one("#status", Static).update("Unsaved changes (*)")
+        self._set_status_text("Unsaved changes (*)")
 
     def _restore_row(self, table: ResultTable, row_idx: int) -> None:
         if row_idx >= len(self._original_rows):
@@ -155,9 +189,9 @@ class MainScreen(Screen):
 
     def _update_status(self, table: ResultTable) -> None:
         if not table.pending_changes and not table.pending_deletes:
-            self.query_one("#status", Static).update("Connected")
+            self._set_status_text("Connected")
         else:
-            self.query_one("#status", Static).update("Unsaved changes (*)")
+            self._set_status_text("Unsaved changes (*)")
 
     def on_result_table_delete_row_requested(self, event: ResultTable.DeleteRowRequested) -> None:
         pk_cols = [c for c in self._current_columns if c.is_primary_key]
@@ -196,33 +230,33 @@ class MainScreen(Screen):
         self._update_status(table)
 
     def action_command_input(self) -> None:
-        cmd_input = self.query_one("#command-input", Input)
-        cmd_input.add_class("visible")
-        cmd_input.value = ""
-        cmd_input.focus()
-        self.query_one("#status", Static).display = False
+        self._enter_command_mode()
 
-    async def on_input_submitted(self, event: Input.Submitted) -> None:
-        if event.input.id != "command-input":
+    def check_action(self, action: str, parameters: tuple[object, ...]) -> bool | None:
+        if self._command_mode:
+            return False
+        return super().check_action(action, parameters)
+
+    async def on_key(self, event: Key) -> None:
+        if not self._command_mode:
             return
-        cmd = event.value.strip()
-        cmd_input = self.query_one("#command-input", Input)
-        cmd_input.remove_class("visible")
-        cmd_input.value = ""
-        self.query_one("#status", Static).display = True
-        self.query_one(ResultTable).focus()
-        if cmd == "w":
-            await self._save_changes()
 
-    def on_key(self, event) -> None:
-        cmd_input = self.query_one("#command-input", Input)
-        if cmd_input.has_class("visible") and event.key == "escape":
-            cmd_input.remove_class("visible")
-            cmd_input.value = ""
-            self.query_one("#status", Static).display = True
-            self.query_one(ResultTable).focus()
-            event.prevent_default()
-            event.stop()
+        if event.key == "escape":
+            self._exit_command_mode()
+        elif event.key == "enter":
+            cmd = self._command_buffer.strip()
+            self._exit_command_mode()
+            if cmd == "w":
+                await self._save_changes()
+        elif event.key == "backspace":
+            self._command_buffer = self._command_buffer[:-1]
+            self._render_command_line()
+        elif event.character and event.character.isprintable():
+            self._command_buffer += event.character
+            self._render_command_line()
+
+        event.prevent_default()
+        event.stop()
 
     async def _save_changes(self) -> None:
         table_widget = self.query_one(ResultTable)
@@ -320,7 +354,7 @@ class MainScreen(Screen):
         if total_updated:
             parts.append(f"Updated {total_updated} row(s)")
         self.notify(", ".join(parts) if parts else "Saved", severity="information")
-        self.query_one("#status", Static).update("Connected")
+        self._set_status_text("Connected")
 
     def action_focus_tree(self) -> None:
         self.query_one(SchemaTree).focus()
