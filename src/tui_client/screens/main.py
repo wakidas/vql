@@ -5,7 +5,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Key
 from textual.screen import Screen
-from textual.widgets import DataTable, Header, Static, Tree
+from textual.widgets import DataTable, Header, Input, Static, Tree
 from psycopg import sql
 
 from tui_client.db.base import Column, DBAdapter, Table
@@ -28,6 +28,7 @@ class MainScreen(Screen):
         Binding("r", "refresh", "Refresh", show=True),
         Binding("q", "quit", "Quit", show=True),
         Binding("colon", "command_input", "Command", show=False),
+        Binding("slash", "search", "Search", show=False),
     ]
 
     DEFAULT_CSS = """
@@ -48,8 +49,17 @@ class MainScreen(Screen):
     #sidebar {
         width: 1fr;
     }
+    #main-container {
+        width: 1fr;
+    }
     #main {
         width: 1fr;
+    }
+    #where-input {
+        height: 1;
+        background: $surface;
+        border: none;
+        padding: 0 1;
     }
     #status {
         height: 1;
@@ -75,6 +85,7 @@ class MainScreen(Screen):
         self._command_mode = False
         self._command_buffer = ""
         self._footer_text = "; Property   c Connect   r Refresh   q Quit"
+        self._current_where: str = ""
 
     def compose(self) -> ComposeResult:
         yield Header()
@@ -82,7 +93,12 @@ class MainScreen(Screen):
             with Vertical(id="sidebar-container"):
                 yield DbHeader(id="db-header")
                 yield SchemaTree(id="sidebar")
-            yield ResultTable(id="main")
+            with Vertical(id="main-container"):
+                yield Input(
+                    placeholder="WHERE Enter a WHERE clause to filter the results",
+                    id="where-input",
+                )
+                yield ResultTable(id="main")
             yield PropertyPanel(id="property")
         with Vertical(id="bottom-bar"):
             yield Static(self._status_text, id="status")
@@ -117,6 +133,15 @@ class MainScreen(Screen):
         self._command_buffer = ""
         self._status_widget().update(self._status_text)
 
+    def _build_select_query(self) -> sql.Composable:
+        base = sql.SQL("SELECT * FROM {}.{}").format(
+            sql.Identifier(self._current_table.schema),
+            sql.Identifier(self._current_table.name),
+        )
+        if self._current_where:
+            base = sql.SQL("{} WHERE {}").format(base, sql.SQL(self._current_where))
+        return sql.SQL("{} LIMIT 100").format(base)
+
     async def _load_schema(self) -> None:
         tree = self.query_one(SchemaTree)
         await tree.load_tables(self.adapter)
@@ -127,14 +152,13 @@ class MainScreen(Screen):
         if table is None or self.adapter is None:
             return
         self._current_table = table
+        self._current_where = ""
+        self.query_one("#where-input", Input).value = ""
         try:
             self._current_columns = await self.adapter.get_columns(table.schema, table.name)
         except Exception:
             self._current_columns = []
-        query = sql.SQL("SELECT * FROM {}.{} LIMIT 100").format(
-            sql.Identifier(table.schema),
-            sql.Identifier(table.name),
-        )
+        query = self._build_select_query()
         try:
             result = await self.adapter.execute(query)
         except Exception as e:
@@ -229,6 +253,31 @@ class MainScreen(Screen):
             return
         self._update_status(table)
 
+    def action_search(self) -> None:
+        if self._current_table is None:
+            return
+        self.query_one("#where-input", Input).focus()
+
+    async def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id != "where-input":
+            return
+        if self._current_table is None or self.adapter is None:
+            return
+        where_clause = event.value.strip()
+        if ";" in where_clause:
+            self.notify("Semicolons are not allowed in WHERE clause", severity="error")
+            return
+        self._current_where = where_clause
+        query = self._build_select_query()
+        try:
+            result = await self.adapter.execute(query)
+        except Exception as e:
+            self.notify(f"Query failed: {e}", severity="error")
+            return
+        self._original_rows = list(result.rows)
+        self.query_one(ResultTable).load_result(result)
+        self.query_one(ResultTable).focus()
+
     def action_command_input(self) -> None:
         self._enter_command_mode()
 
@@ -238,6 +287,13 @@ class MainScreen(Screen):
         return super().check_action(action, parameters)
 
     async def on_key(self, event: Key) -> None:
+        if isinstance(self.focused, Input) and self.focused.id == "where-input":
+            if event.key == "escape":
+                self.query_one(ResultTable).focus()
+                event.prevent_default()
+                event.stop()
+            return
+
         if not self._command_mode:
             return
 
@@ -338,10 +394,7 @@ class MainScreen(Screen):
                 self.notify(f"Update failed: {e}", severity="error")
                 return
         table_widget.clear_pending_changes()
-        query = sql.SQL("SELECT * FROM {}.{} LIMIT 100").format(
-            sql.Identifier(self._current_table.schema),
-            sql.Identifier(self._current_table.name),
-        )
+        query = self._build_select_query()
         try:
             qr = await self.adapter.execute(query)
             self._original_rows = list(qr.rows)
