@@ -1,6 +1,6 @@
 import pytest
 from textual.app import App
-from textual.widgets import Input
+from textual.widgets import Input, Static
 
 from tui_client.db.base import Table
 from tui_client.screens.main import MainScreen
@@ -14,19 +14,19 @@ class TreeSearchTestApp(App[None]):
 
 
 @pytest.mark.asyncio
-async def test_tree_search_input_hidden_by_default():
-    """tree-search-input should be hidden initially."""
+async def test_tree_search_input_always_visible():
+    """tree-search-input should be visible by default."""
     app = TreeSearchTestApp()
 
     async with app.run_test() as pilot:
         await pilot.pause()
         search_input = app.screen.query_one("#tree-search-input", Input)
-        assert search_input.display is False
+        assert search_input.display is True
 
 
 @pytest.mark.asyncio
-async def test_slash_on_schema_tree_shows_search_input():
-    """Pressing / while SchemaTree is focused should show tree-search-input."""
+async def test_slash_on_schema_tree_focuses_search_input():
+    """Pressing / while SchemaTree is focused should focus tree-search-input."""
     app = TreeSearchTestApp()
 
     async with app.run_test() as pilot:
@@ -38,8 +38,77 @@ async def test_slash_on_schema_tree_shows_search_input():
         await pilot.pause()
 
         search_input = app.screen.query_one("#tree-search-input", Input)
-        assert search_input.display is True
         assert app.screen.focused is search_input
+
+
+@pytest.mark.asyncio
+async def test_search_label_active_when_focused():
+    """Search label should have 'active' class when input is focused."""
+    app = TreeSearchTestApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree = app.screen.query_one(SchemaTree)
+        tree.focus()
+
+        await pilot.press("slash")
+        await pilot.pause()
+
+        label = app.screen.query_one("#tree-search-label", Static)
+        assert label.has_class("active")
+
+
+@pytest.mark.asyncio
+async def test_search_label_active_with_text_after_enter():
+    """Search label should stay 'active' after Enter when text remains."""
+    app = TreeSearchTestApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree = app.screen.query_one(SchemaTree)
+        tree._all_tables = [
+            Table(name="users", schema="public"),
+            Table(name="orders", schema="public"),
+        ]
+        tree.filter_tables("")
+        tree.focus()
+
+        await pilot.press("slash")
+        await pilot.pause()
+        await pilot.press("u", "s", "e", "r")
+        await pilot.press("enter")
+        await pilot.pause()
+
+        label = app.screen.query_one("#tree-search-label", Static)
+        search_input = app.screen.query_one("#tree-search-input", Input)
+        assert label.has_class("active")
+        assert search_input.value == "user"
+
+
+@pytest.mark.asyncio
+async def test_search_label_inactive_after_escape():
+    """Search label should lose 'active' class after Escape clears text."""
+    app = TreeSearchTestApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        tree = app.screen.query_one(SchemaTree)
+        tree._all_tables = [
+            Table(name="users", schema="public"),
+        ]
+        tree.filter_tables("")
+        tree.focus()
+
+        await pilot.press("slash")
+        await pilot.pause()
+        await pilot.press("u")
+        await pilot.press("escape")
+        await pilot.pause()
+
+        label = app.screen.query_one("#tree-search-label", Static)
+        search_input = app.screen.query_one("#tree-search-input", Input)
+        assert not label.has_class("active")
+        assert search_input.value == ""
 
 
 @pytest.mark.asyncio
@@ -63,8 +132,8 @@ async def test_slash_on_result_table_focuses_where_input():
 
 
 @pytest.mark.asyncio
-async def test_escape_hides_search_input_and_restores_tree():
-    """Escape during tree search should hide input and restore all tables."""
+async def test_escape_clears_and_restores_tree():
+    """Escape during tree search should clear input and restore all tables."""
     app = TreeSearchTestApp()
 
     async with app.run_test() as pilot:
@@ -79,12 +148,10 @@ async def test_escape_hides_search_input_and_restores_tree():
 
         await pilot.press("slash")
         await pilot.pause()
-
+        await pilot.press("u")
         await pilot.press("escape")
         await pilot.pause()
 
-        search_input = app.screen.query_one("#tree-search-input", Input)
-        assert search_input.display is False
         assert isinstance(app.screen.focused, SchemaTree)
         leaves = [n for n in tree.root.children if n.data is not None]
         assert len(leaves) == 2
@@ -92,7 +159,7 @@ async def test_escape_hides_search_input_and_restores_tree():
 
 @pytest.mark.asyncio
 async def test_enter_confirms_search_and_selects_first_node():
-    """Enter during tree search should hide input, focus tree, and cursor on first leaf."""
+    """Enter during tree search should focus tree and cursor on first leaf."""
     app = TreeSearchTestApp()
 
     async with app.run_test() as pilot:
@@ -111,10 +178,7 @@ async def test_enter_confirms_search_and_selects_first_node():
         await pilot.press("enter")
         await pilot.pause()
 
-        search_input = app.screen.query_one("#tree-search-input", Input)
-        assert search_input.display is False
         assert isinstance(app.screen.focused, SchemaTree)
-        # Cursor should be on the first leaf node
         assert tree.cursor_node is not None
         assert tree.cursor_node.data is not None
         assert tree.cursor_node.data.name == "users"

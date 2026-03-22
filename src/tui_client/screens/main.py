@@ -49,12 +49,24 @@ class MainScreen(Screen):
     #sidebar {
         width: 1fr;
     }
+    #tree-search-container {
+        height: 1;
+        layout: horizontal;
+        background: $surface;
+        padding: 0 1;
+    }
+    #tree-search-label {
+        width: auto;
+        color: $text-muted;
+    }
+    #tree-search-label.active {
+        color: $success;
+    }
     #tree-search-input {
-        display: none;
         height: 1;
         background: $surface;
         border: none;
-        padding: 0 1;
+        padding: 0;
     }
     #main-container {
         width: 1fr;
@@ -99,11 +111,11 @@ class MainScreen(Screen):
         with Horizontal(id="content"):
             with Vertical(id="sidebar-container"):
                 yield DbHeader(id="db-header")
-                yield Input(
-                    placeholder="Search:",
-                    id="tree-search-input",
-                    disabled=True,
-                )
+                with Horizontal(id="tree-search-container"):
+                    yield Static("Search: ", id="tree-search-label")
+                    search_input = Input(id="tree-search-input")
+                    search_input.can_focus = False
+                    yield search_input
                 yield SchemaTree(id="sidebar")
             with Vertical(id="main-container"):
                 yield Input(
@@ -265,30 +277,26 @@ class MainScreen(Screen):
             return
         self._update_status(table)
 
-    def _show_tree_search(self) -> None:
+    def _update_search_label(self, *, searching: bool = False) -> None:
+        label = self.query_one("#tree-search-label", Static)
         search_input = self.query_one("#tree-search-input", Input)
-        search_input.disabled = False
-        search_input.display = True
-        search_input.value = ""
-        search_input.focus()
-
-    def _hide_tree_search(self, *, reset_filter: bool = False) -> None:
-        search_input = self.query_one("#tree-search-input", Input)
-        search_input.display = False
-        search_input.disabled = True
-        if reset_filter:
-            search_input.value = ""
-        self.query_one(SchemaTree).focus()
+        if searching or search_input.value:
+            label.add_class("active")
+        else:
+            label.remove_class("active")
 
     def on_schema_tree_search_mode_changed(self, event: SchemaTree.SearchModeChanged) -> None:
         if event.active:
-            self._show_tree_search()
-        else:
-            self._hide_tree_search()
+            search_input = self.query_one("#tree-search-input", Input)
+            search_input.can_focus = True
+            search_input.value = ""
+            search_input.focus()
+            self._update_search_label(searching=True)
 
     def on_input_changed(self, event: Input.Changed) -> None:
         if event.input.id == "tree-search-input":
             self.query_one(SchemaTree).filter_tables(event.value)
+            self._update_search_label()
 
     def action_search(self) -> None:
         if self._current_table is None:
@@ -326,17 +334,24 @@ class MainScreen(Screen):
     async def on_key(self, event: Key) -> None:
         if isinstance(self.focused, Input) and self.focused.id == "tree-search-input":
             if event.key == "escape":
+                search_input = self.query_one("#tree-search-input", Input)
+                search_input.value = ""
+                search_input.can_focus = False
                 self.query_one(SchemaTree).filter_tables("")
-                self._hide_tree_search(reset_filter=True)
+                self.query_one(SchemaTree).focus()
+                self._update_search_label()
                 event.prevent_default()
                 event.stop()
             elif event.key == "enter":
-                self._hide_tree_search()
+                search_input = self.query_one("#tree-search-input", Input)
+                search_input.can_focus = False
                 tree = self.query_one(SchemaTree)
+                tree.focus()
                 leaves = [n for n in tree.root.children if n.data is not None]
                 if leaves:
                     tree.select_node(leaves[0])
                     tree.scroll_to_node(leaves[0])
+                self._update_search_label()
                 event.prevent_default()
                 event.stop()
             return
