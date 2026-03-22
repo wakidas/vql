@@ -13,11 +13,12 @@ class TabBar(Static):
     }
     """
 
-    TABS = [("1", "Tables", "tables"), ("2", "SQL", "sql")]
+    DEFAULT_TABS = [("1", "Tables", "tables"), ("2", "SQL", "sql")]
 
-    def __init__(self, **kwargs) -> None:
+    def __init__(self, tabs: list[tuple[str, str, str]] | None = None, **kwargs) -> None:
         super().__init__(**kwargs)
-        self._active = "tables"
+        self._tabs = tabs or self.DEFAULT_TABS
+        self._active = self._tabs[0][2]
 
     def set_active(self, tab: str) -> None:
         self._active = tab
@@ -28,9 +29,9 @@ class TabBar(Static):
 
     def _render_label(self) -> None:
         parts = []
-        for key, label, tab_id in self.TABS:
+        for key, label, tab_id in self._tabs:
             if tab_id == self._active:
-                parts.append(f"[bold]{key} {label}[/bold]")
+                parts.append(f"[bold][{key}] {label}[/bold]")
             else:
-                parts.append(f"[dim]{key} {label}[/dim]")
+                parts.append(f"[dim][{key}] {label}[/dim]")
         self.update("  |  ".join(parts))

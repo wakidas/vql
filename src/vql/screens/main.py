@@ -71,6 +71,9 @@ class MainScreen(Screen):
         border: none;
         padding: 0;
     }
+    #center-panel {
+        width: 1fr;
+    }
     #main-container {
         width: 1fr;
     }
@@ -98,7 +101,7 @@ class MainScreen(Screen):
     #tables-tab {
         height: 1fr;
     }
-    #sql-tab {
+    #history-tab {
         height: 1fr;
     }
     #sql-container {
@@ -120,7 +123,8 @@ class MainScreen(Screen):
         self._command_buffer = ""
         self._footer_text = "; Property   c Connect   r Refresh   q Quit"
         self._current_where: str = ""
-        self._active_tab: str = "tables"
+        self._active_sidebar_tab: str = "tables"
+        self._active_center_tab: str = "tables"
         self._sql_history: list[str] = []
 
     def compose(self) -> ComposeResult:
@@ -128,7 +132,10 @@ class MainScreen(Screen):
         with Horizontal(id="content"):
             with Vertical(id="sidebar-container"):
                 yield DbHeader(id="db-header")
-                yield TabBar(id="tab-bar")
+                yield TabBar(
+                    tabs=[("1", "Tables", "tables"), ("2", "History", "history")],
+                    id="tab-bar",
+                )
                 with Vertical(id="tables-tab"):
                     with Horizontal(id="tree-search-container"):
                         yield Static("Search: ", id="tree-search-label")
@@ -136,21 +143,23 @@ class MainScreen(Screen):
                         search_input.can_focus = False
                         yield search_input
                     yield SchemaTree(id="sidebar")
-                sql_tab = Vertical(id="sql-tab")
-                sql_tab.display = False
-                with sql_tab:
+                history_tab = Vertical(id="history-tab")
+                history_tab.display = False
+                with history_tab:
                     yield SqlHistoryList(id="sql-history")
-            with Vertical(id="main-container"):
-                yield Input(
-                    placeholder="WHERE Enter a WHERE clause to filter the results",
-                    id="where-input",
-                )
-                yield ResultTable(id="main")
-            sql_container = Vertical(id="sql-container")
-            sql_container.display = False
-            with sql_container:
-                yield SqlEditor(id="sql-editor")
-                yield ResultTable(id="sql-result")
+            with Vertical(id="center-panel"):
+                yield TabBar(id="center-tab-bar")
+                with Vertical(id="main-container"):
+                    yield Input(
+                        placeholder="WHERE Enter a WHERE clause to filter the results",
+                        id="where-input",
+                    )
+                    yield ResultTable(id="main")
+                sql_container = Vertical(id="sql-container")
+                sql_container.display = False
+                with sql_container:
+                    yield SqlEditor(id="sql-editor")
+                    yield ResultTable(id="sql-result")
             yield PropertyPanel(id="property")
         with Vertical(id="bottom-bar"):
             yield Static(self._status_text, id="status")
@@ -220,7 +229,7 @@ class MainScreen(Screen):
         self.query_one("#main", ResultTable).load_result(result)
 
     def _active_result_table(self) -> ResultTable:
-        if self._active_tab == "sql":
+        if self._active_center_tab == "sql":
             return self.query_one("#sql-result", ResultTable)
         return self.query_one("#main", ResultTable)
 
@@ -365,30 +374,48 @@ class MainScreen(Screen):
             return False
         return super().check_action(action, parameters)
 
-    def _switch_tab(self, tab: str) -> None:
-        if self._active_tab == tab:
+    def _switch_sidebar_tab(self, tab: str) -> None:
+        if self._active_sidebar_tab == tab:
             return
-        self._active_tab = tab
-        self.query_one(TabBar).set_active(tab)
+        self._active_sidebar_tab = tab
+        self.query_one("#tab-bar", TabBar).set_active(tab)
         is_tables = tab == "tables"
         self.query_one("#tables-tab").display = is_tables
-        self.query_one("#sql-tab").display = not is_tables
-        self.query_one("#main-container").display = is_tables
-        self.query_one("#sql-container").display = not is_tables
+        self.query_one("#history-tab").display = not is_tables
         if is_tables:
             self.query_one(SchemaTree).focus()
         else:
-            self.query_one(SqlEditor).focus()
+            self.query_one(SqlHistoryList).focus()
+
+    def _switch_center_tab(self, tab: str) -> None:
+        if self._active_center_tab == tab:
+            return
+        self._active_center_tab = tab
+        self.query_one("#center-tab-bar", TabBar).set_active(tab)
+        is_tables = tab == "tables"
+        self.query_one("#main-container").display = is_tables
+        self.query_one("#sql-container").display = not is_tables
 
     async def on_key(self, event: Key) -> None:
+        if event.key == "ctrl+1":
+            self._switch_center_tab("tables")
+            event.prevent_default()
+            event.stop()
+            return
+        elif event.key == "ctrl+2":
+            self._switch_center_tab("sql")
+            event.prevent_default()
+            event.stop()
+            return
+
         if not isinstance(self.focused, (Input, TextArea)) and not self._command_mode:
             if event.key == "1":
-                self._switch_tab("tables")
+                self._switch_sidebar_tab("tables")
                 event.prevent_default()
                 event.stop()
                 return
             elif event.key == "2":
-                self._switch_tab("sql")
+                self._switch_sidebar_tab("history")
                 event.prevent_default()
                 event.stop()
                 return
@@ -570,7 +597,7 @@ class MainScreen(Screen):
             editor.focus()
 
     def action_focus_tree(self) -> None:
-        if self._active_tab == "tables":
+        if self._active_sidebar_tab == "tables":
             self.query_one(SchemaTree).focus()
         else:
             self.query_one(SqlHistoryList).focus()
