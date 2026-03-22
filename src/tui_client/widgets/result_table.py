@@ -1,10 +1,18 @@
 from __future__ import annotations
 
+from datetime import datetime
+
 from textual.binding import Binding
 from textual.message import Message
 from textual.widgets import DataTable
 
 from tui_client.db.base import QueryResult
+
+
+def format_cell_value(value):
+    if isinstance(value, datetime):
+        return value.strftime("%Y-%m-%d %H:%M:%S")
+    return value
 
 
 class ResultTable(DataTable):
@@ -142,4 +150,7 @@ class ResultTable(DataTable):
         if not result.columns:
             return
         self.add_columns(*result.columns)
-        self.add_rows(result.rows)
+        formatted_rows = [
+            tuple(format_cell_value(v) for v in row) for row in result.rows
+        ]
+        self.add_rows(formatted_rows)

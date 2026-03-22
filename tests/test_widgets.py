@@ -1,5 +1,7 @@
+from datetime import datetime, date, time
+
 from tui_client.db.base import QueryResult
-from tui_client.widgets.result_table import ResultTable
+from tui_client.widgets.result_table import ResultTable, format_cell_value
 
 
 def test_result_table_load_result():
@@ -95,3 +97,19 @@ def test_result_table_undo_pending_delete():
     table.add_pending_delete(0)
     table.undo_pending(0, None)
     assert table.pending_deletes == set()
+
+
+def test_format_cell_value_datetime_truncates_subseconds():
+    dt = datetime(2025, 3, 22, 12, 34, 56, 123456)
+    assert format_cell_value(dt) == "2025-03-22 12:34:56"
+
+
+def test_format_cell_value_datetime_without_subseconds():
+    dt = datetime(2025, 3, 22, 12, 34, 56)
+    assert format_cell_value(dt) == "2025-03-22 12:34:56"
+
+
+def test_format_cell_value_non_datetime_passthrough():
+    assert format_cell_value(42) == 42
+    assert format_cell_value("hello") == "hello"
+    assert format_cell_value(None) is None
