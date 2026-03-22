@@ -18,6 +18,8 @@ from tui_client.screens.confirm_modal import ConfirmModal
 
 class MainScreen(Screen):
     BINDINGS = [
+        Binding("tab", "focus_next", "Focus Next", show=False),
+        Binding("shift+tab", "focus_previous", "Focus Previous", show=False),
         Binding("h", "focus_tree", "Tree", show=True),
         Binding("l", "focus_table", "Table", show=True),
         Binding("semicolon", "focus_property", "Property", show=True),
