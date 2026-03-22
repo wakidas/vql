@@ -289,7 +289,6 @@ class MainScreen(Screen):
         if event.active:
             search_input = self.query_one("#tree-search-input", Input)
             search_input.can_focus = True
-            search_input.value = ""
             search_input.focus()
             self._update_search_label(searching=True)
 
