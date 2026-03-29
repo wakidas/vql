@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import json
+
 from textual.app import ComposeResult
 from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
@@ -7,6 +9,7 @@ from textual.events import Key
 from textual.screen import Screen
 from textual.widgets import DataTable, Header, Input, Static, TextArea, Tree
 from psycopg import sql
+from psycopg.types.json import Json, Jsonb
 
 from vql.db.base import Column, DBAdapter, Table
 from vql.widgets.schema_tree import SchemaTree
@@ -21,6 +24,9 @@ from vql.screens.confirm_modal import ConfirmModal
 
 
 class MainScreen(Screen):
+    _CENTER_TAB_LEFT_KEYS = frozenset({"[", "left_square_bracket"})
+    _CENTER_TAB_RIGHT_KEYS = frozenset({"]", "right_square_bracket"})
+
     BINDINGS = [
         Binding("tab", "focus_next", "Focus Next", show=False),
         Binding("shift+tab", "focus_previous", "Focus Previous", show=False),
@@ -147,7 +153,10 @@ class MainScreen(Screen):
                 with history_tab:
                     yield SqlHistoryList(id="sql-history")
             with Vertical(id="center-panel"):
-                yield TabBar(id="center-tab-bar")
+                yield TabBar(
+                    tabs=[("[", "Tables", "tables"), ("]", "SQL", "sql")],
+                    id="center-tab-bar",
+                )
                 with Vertical(id="main-container"):
                     yield Input(
                         placeholder="WHERE Enter a WHERE clause to filter the results",
@@ -202,6 +211,32 @@ class MainScreen(Screen):
             base = sql.SQL("{} WHERE {}").format(base, sql.SQL(self._current_where))
         return sql.SQL("{} LIMIT 100").format(base)
 
+    def _column_type_for_name(self, column_name: str) -> str | None:
+        for column in self._current_columns:
+            if column.name == column_name:
+                return column.data_type
+        return None
+
+    def _column_types_for(self, column_names: list[str]) -> list[str | None]:
+        return [self._column_type_for_name(column_name) for column_name in column_names]
+
+    def _prepare_update_value(self, column_name: str, value: str | None):
+        if value is None:
+            return None
+
+        data_type = self._column_type_for_name(column_name)
+        if data_type not in {"json", "jsonb"}:
+            return value
+
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError as error:
+            raise ValueError(
+                f"{column_name} must be valid JSON ({error.msg} at line {error.lineno}, column {error.colno})"
+            ) from error
+
+        return Json(parsed) if data_type == "json" else Jsonb(parsed)
+
     async def _load_schema(self) -> None:
         tree = self.query_one(SchemaTree)
         await tree.load_tables(self.adapter)
@@ -225,7 +260,10 @@ class MainScreen(Screen):
             self.notify(f"Query failed: {e}", severity="error")
             return
         self._original_rows = list(result.rows)
-        self.query_one("#main", ResultTable).load_result(result)
+        self.query_one("#main", ResultTable).load_result(
+            result,
+            column_types=self._column_types_for(result.columns),
+        )
 
     def _active_result_table(self) -> ResultTable:
         if self._active_center_tab == "sql":
@@ -313,7 +351,11 @@ class MainScreen(Screen):
             original_value = self._original_rows[row_idx][col_idx]
             try:
                 cell_key = table.coordinate_to_cell_key((row_idx, col_idx))
-                table.update_cell(cell_key.row_key, cell_key.column_key, original_value)
+                table.update_cell(
+                    cell_key.row_key,
+                    cell_key.column_key,
+                    table._format_for_display(col_idx, original_value),
+                )
             except Exception:
                 pass
         else:
@@ -362,7 +404,10 @@ class MainScreen(Screen):
             self.notify(f"Query failed: {e}", severity="error")
             return
         self._original_rows = list(result.rows)
-        self.query_one("#main", ResultTable).load_result(result)
+        self.query_one("#main", ResultTable).load_result(
+            result,
+            column_types=self._column_types_for(result.columns),
+        )
         self.query_one("#main", ResultTable).focus()
 
     def action_command_input(self) -> None:
@@ -389,22 +434,41 @@ class MainScreen(Screen):
     def _switch_center_tab(self, tab: str) -> None:
         if self._active_center_tab == tab:
             return
+        previous_focus = self.focused
         self._active_center_tab = tab
         self.query_one("#center-tab-bar", TabBar).set_active(tab)
         is_tables = tab == "tables"
         self.query_one("#main-container").display = is_tables
         self.query_one("#sql-container").display = not is_tables
+        if tab == "sql" and previous_focus in {
+            self.query_one("#where-input", Input),
+            self.query_one("#main", ResultTable),
+        }:
+            self.query_one("#sql-editor", SqlEditor).focus()
+        elif tab == "tables" and previous_focus in {
+            self.query_one("#sql-editor", SqlEditor),
+            self.query_one("#sql-result", ResultTable),
+        }:
+            self.query_one("#main", ResultTable).focus()
+
+    def _handle_center_tab_shortcut(self, event: Key) -> bool:
+        if self._command_mode or isinstance(self.focused, (Input, TextArea)):
+            return False
+
+        keys = {event.key, *event.aliases}
+        if keys & self._CENTER_TAB_LEFT_KEYS:
+            self._switch_center_tab("tables")
+        elif keys & self._CENTER_TAB_RIGHT_KEYS:
+            self._switch_center_tab("sql")
+        else:
+            return False
+
+        event.prevent_default()
+        event.stop()
+        return True
 
     async def on_key(self, event: Key) -> None:
-        if event.key == "ctrl+1":
-            self._switch_center_tab("tables")
-            event.prevent_default()
-            event.stop()
-            return
-        elif event.key == "ctrl+2":
-            self._switch_center_tab("sql")
-            event.prevent_default()
-            event.stop()
+        if self._handle_center_tab_shortcut(event):
             return
 
         if not isinstance(self.focused, (Input, TextArea)) and not self._command_mode:
@@ -543,9 +607,13 @@ class MainScreen(Screen):
         for row_idx, col_changes in changes_by_row.items():
             original_row = self._original_rows[row_idx]
             pk_values = [original_row[col_names.index(pk.name)] for pk in pk_cols]
-            update_columns = [col_names[ci] for ci in col_changes]
-            update_values = list(col_changes.values())
+            ordered_changes = sorted(col_changes.items())
+            update_columns = [col_names[col_idx] for col_idx, _ in ordered_changes]
             try:
+                update_values = [
+                    self._prepare_update_value(col_names[col_idx], value)
+                    for col_idx, value in ordered_changes
+                ]
                 result = await self.adapter.update(
                     schema=self._current_table.schema,
                     table=self._current_table.name,
@@ -563,7 +631,7 @@ class MainScreen(Screen):
         try:
             qr = await self.adapter.execute(query)
             self._original_rows = list(qr.rows)
-            table_widget.load_result(qr)
+            table_widget.load_result(qr, column_types=self._column_types_for(qr.columns))
         except Exception:
             pass
         parts = []

@@ -66,33 +66,104 @@ async def test_tab_key_ignored_in_input():
 
 
 @pytest.mark.asyncio
-async def test_ctrl_2_works_even_in_input():
-    """Input内でもctrl+2で中央パネルが切り替わること"""
+async def test_center_tab_shortcuts_are_ignored_in_input():
+    """Inputにフォーカスがある間は中央タブ切り替えを奪わないこと"""
     app = TabSwitchTestApp()
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         screen = app.query_one(MainScreen)
         screen.query_one("#where-input", Input).focus()
         await pilot.pause()
-        await pilot.press("ctrl+2")
+        await pilot.press("]")
         await pilot.pause()
-        assert screen._active_center_tab == "sql"
+        assert screen._active_center_tab == "tables"
 
 
 @pytest.mark.asyncio
-async def test_ctrl_2_shows_sql_container():
-    """ctrl+2で中央パネルがSQL表示に切り替わること"""
+async def test_right_bracket_shows_sql_container():
+    """] で中央パネルがSQL表示に切り替わること"""
     app = TabSwitchTestApp()
     async with app.run_test(size=(120, 40)) as pilot:
         await pilot.pause()
         screen = app.query_one(MainScreen)
         screen.query_one("#sidebar").focus()
         await pilot.pause()
-        await pilot.press("ctrl+2")
+        await pilot.press("]")
         await pilot.pause()
         assert screen._active_center_tab == "sql"
         assert screen.query_one("#sql-container").display is True
         assert screen.query_one("#main-container").display is False
+
+
+@pytest.mark.asyncio
+async def test_left_bracket_returns_to_tables_after_right_bracket():
+    """] でSQLへ移動した後、[ でTablesへ戻れること"""
+    app = TabSwitchTestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.query_one(MainScreen)
+        screen.query_one("#sidebar").focus()
+        await pilot.pause()
+        await pilot.press("]")
+        await pilot.pause()
+        await pilot.press("[")
+        await pilot.pause()
+        assert screen._active_center_tab == "tables"
+        assert screen.query_one("#main-container").display is True
+        assert screen.query_one("#sql-container").display is False
+
+
+@pytest.mark.asyncio
+async def test_right_bracket_is_ignored_in_sql_editor():
+    """SQL editorでは ] を入力に使えるよう中央タブ切り替えを奪わないこと"""
+    app = TabSwitchTestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.query_one(MainScreen)
+        screen._switch_center_tab("sql")
+        await pilot.pause()
+        screen.query_one("#sql-editor", TextArea).focus()
+        await pilot.pause()
+        await pilot.press("]")
+        await pilot.pause()
+        assert screen._active_center_tab == "sql"
+        assert screen.focused is screen.query_one("#sql-editor", TextArea)
+
+
+@pytest.mark.asyncio
+async def test_left_bracket_works_from_sql_result():
+    """SQL resultにフォーカスがあるときは [ でTables表示へ戻れること"""
+    app = TabSwitchTestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.query_one(MainScreen)
+        screen._switch_center_tab("sql")
+        await pilot.pause()
+        screen.query_one("#sql-result").focus()
+        await pilot.pause()
+        await pilot.press("[")
+        await pilot.pause()
+        assert screen._active_center_tab == "tables"
+        assert screen.query_one("#main-container").display is True
+        assert screen.query_one("#sql-container").display is False
+
+
+@pytest.mark.asyncio
+async def test_switching_center_tabs_moves_focus_to_visible_result_widget():
+    app = TabSwitchTestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.query_one(MainScreen)
+        screen.query_one("#main").focus()
+        await pilot.pause()
+        screen._switch_center_tab("sql")
+        await pilot.pause()
+        assert screen.focused is screen.query_one("#sql-editor", TextArea)
+        screen.query_one("#sql-result").focus()
+        await pilot.pause()
+        screen._switch_center_tab("tables")
+        await pilot.pause()
+        assert screen.focused is screen.query_one("#main")
 
 
 @pytest.mark.asyncio
