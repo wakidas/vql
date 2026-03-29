@@ -29,7 +29,6 @@ class MainScreen(Screen):
         Binding("semicolon", "focus_property", "Property", show=True),
         Binding("c", "connect", "Connect", show=True),
         Binding("r", "refresh", "Refresh", show=True),
-        Binding("q", "quit", "Quit", show=True),
         Binding("colon", "command_input", "Command", show=False),
         Binding("slash", "search", "Search", show=False),
     ]
@@ -121,7 +120,7 @@ class MainScreen(Screen):
         self._status_text = "No connection"
         self._command_mode = False
         self._command_buffer = ""
-        self._footer_text = "; Property   c Connect   r Refresh   q Quit"
+        self._footer_text = "; Property   c Connect   r Refresh   : Command"
         self._current_where: str = ""
         self._active_sidebar_tab: str = "tables"
         self._active_center_tab: str = "tables"
@@ -468,6 +467,8 @@ class MainScreen(Screen):
             self._exit_command_mode()
             if cmd == "w":
                 await self._save_changes()
+            elif cmd == "q":
+                self.action_quit()
         elif event.key == "backspace":
             self._command_buffer = self._command_buffer[:-1]
             self._render_command_line()

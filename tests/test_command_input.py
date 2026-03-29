@@ -12,6 +12,12 @@ def test_main_screen_has_colon_binding():
     assert bindings["colon"].action == "command_input"
 
 
+def test_main_screen_has_no_direct_quit_binding():
+    """quit should be available via :q, not direct q binding."""
+    bindings = {b.key: b for b in MainScreen.BINDINGS}
+    assert "q" not in bindings
+
+
 def test_command_mode_uses_status_bar_css():
     """command mode should reuse the status bar instead of a dedicated input."""
     assert "#status" in MainScreen.DEFAULT_CSS
@@ -61,6 +67,18 @@ async def test_command_mode_disables_screen_bindings():
 
         assert app.is_running
         assert screen.query_one("#status", Static).content == ":q"
+
+
+@pytest.mark.asyncio
+async def test_colon_q_exits_app():
+    app = CommandModeTestApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+
+        await pilot.press("colon", "q", "enter")
+
+        assert app.is_running is False
 
 
 @pytest.mark.asyncio
