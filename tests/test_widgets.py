@@ -113,3 +113,11 @@ def test_format_cell_value_non_datetime_passthrough():
     assert format_cell_value(42) == 42
     assert format_cell_value("hello") == "hello"
     assert format_cell_value(None) is None
+
+
+def test_format_cell_value_json_dict_uses_valid_json_syntax():
+    assert format_cell_value({"name": "alice"}, "jsonb") == '{"name": "alice"}'
+
+
+def test_format_cell_value_json_string_is_json_encoded():
+    assert format_cell_value("alice", "json") == '"alice"'

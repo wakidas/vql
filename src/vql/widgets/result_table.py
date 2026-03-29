@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import datetime
 
 from textual.binding import Binding
@@ -9,9 +10,14 @@ from textual.widgets import DataTable
 from vql.db.base import QueryResult
 
 
-def format_cell_value(value):
+_JSON_TYPES = frozenset({"json", "jsonb"})
+
+
+def format_cell_value(value, data_type: str | None = None):
     if isinstance(value, datetime):
         return value.strftime("%Y-%m-%d %H:%M:%S")
+    if data_type in _JSON_TYPES and value is not None:
+        return json.dumps(value, ensure_ascii=False)
     return value
 
 
@@ -47,6 +53,7 @@ class ResultTable(DataTable):
         super().__init__(**kwargs)
         self.cursor_type = "cell"
         self.zebra_stripes = True
+        self.column_types: list[str | None] = []
         self.pending_changes: dict[tuple[int, int], str | None] = {}
         self.pending_deletes: set[int] = set()
 
@@ -139,18 +146,32 @@ class ResultTable(DataTable):
         try:
             for col_idx in range(len(self.columns)):
                 cell_key = self.coordinate_to_cell_key((row_idx, col_idx))
-                self.update_cell(cell_key.row_key, cell_key.column_key, original_row[col_idx])
+                self.update_cell(
+                    cell_key.row_key,
+                    cell_key.column_key,
+                    self._format_for_display(col_idx, original_row[col_idx]),
+                )
         except Exception:
             pass
 
-    def load_result(self, result: QueryResult) -> None:
+    def _format_for_display(self, col_idx: int, value):
+        data_type = self.column_types[col_idx] if col_idx < len(self.column_types) else None
+        return format_cell_value(value, data_type)
+
+    def load_result(
+        self,
+        result: QueryResult,
+        column_types: list[str | None] | None = None,
+    ) -> None:
         self.clear(columns=True)
         self.pending_changes = {}
         self.pending_deletes = set()
+        self.column_types = list(column_types) if column_types is not None else []
         if not result.columns:
             return
         self.add_columns(*result.columns)
         formatted_rows = [
-            tuple(format_cell_value(v) for v in row) for row in result.rows
+            tuple(self._format_for_display(col_idx, value) for col_idx, value in enumerate(row))
+            for row in result.rows
         ]
         self.add_rows(formatted_rows)
