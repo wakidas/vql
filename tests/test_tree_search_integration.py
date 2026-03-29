@@ -2,7 +2,7 @@ import pytest
 from textual.app import App
 from textual.widgets import Input, Static
 
-from vql.db.base import Table
+from vql.db.base import Column, QueryResult, Table
 from vql.screens.main import MainScreen
 from vql.widgets.schema_tree import SchemaTree
 from vql.widgets.result_table import ResultTable
@@ -11,6 +11,17 @@ from vql.widgets.result_table import ResultTable
 class TreeSearchTestApp(App[None]):
     def on_mount(self) -> None:
         self.push_screen(MainScreen())
+
+
+class StubAdapter:
+    async def get_columns(self, schema: str, table: str) -> list[Column]:
+        return [
+            Column(name="id", data_type="integer", is_nullable=False, is_primary_key=True),
+            Column(name="name", data_type="text", is_nullable=False),
+        ]
+
+    async def execute(self, query) -> QueryResult:
+        return QueryResult(columns=["id", "name"], rows=[(1, "alice")])
 
 
 @pytest.mark.asyncio
@@ -209,3 +220,46 @@ async def test_typing_filters_tree_realtime():
         leaves = [n for n in tree.root.children if n.data is not None]
         assert len(leaves) == 2
         assert {leaf.data.name for leaf in leaves} == {"users", "user_roles"}
+
+
+@pytest.mark.asyncio
+async def test_selecting_table_moves_focus_to_main_result_table():
+    app = TreeSearchTestApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        screen.adapter = StubAdapter()
+
+        tree = screen.query_one(SchemaTree)
+        node = tree.root.add_leaf("users", data=Table(name="users", schema="public"))
+        tree.focus()
+        await pilot.pause()
+
+        tree.select_node(node)
+        await pilot.pause()
+
+        assert screen.focused is screen.query_one("#main", ResultTable)
+
+
+@pytest.mark.asyncio
+async def test_selecting_table_from_sql_tab_returns_focus_to_tables_panel():
+    app = TreeSearchTestApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        screen.adapter = StubAdapter()
+        screen._switch_center_tab("sql")
+        await pilot.pause()
+
+        tree = screen.query_one(SchemaTree)
+        node = tree.root.add_leaf("users", data=Table(name="users", schema="public"))
+        tree.focus()
+        await pilot.pause()
+
+        tree.select_node(node)
+        await pilot.pause()
+
+        assert screen._active_center_tab == "tables"
+        assert screen.focused is screen.query_one("#main", ResultTable)

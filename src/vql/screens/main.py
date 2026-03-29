@@ -264,6 +264,8 @@ class MainScreen(Screen):
             result,
             column_types=self._column_types_for(result.columns),
         )
+        self._switch_center_tab("tables")
+        self.query_one("#main", ResultTable).focus()
 
     def _active_result_table(self) -> ResultTable:
         if self._active_center_tab == "sql":
