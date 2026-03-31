@@ -1,9 +1,10 @@
 import pytest
 from textual.app import App
-from textual.widgets import Input, Static
+from textual.widgets import Input, Static, TextArea
 
 from vql.db.base import Table
 from vql.screens.main import MainScreen
+from vql.widgets.result_table import ResultTable
 
 
 class SearchTestApp(App[None]):
@@ -36,8 +37,26 @@ async def test_where_input_is_always_visible():
 
 
 @pytest.mark.asyncio
+async def test_slash_on_sql_tab_focuses_sql_editor():
+    """SQLタブ表示中は / で sql-editor にフォーカスする。"""
+    app = SearchTestApp()
+
+    async with app.run_test() as pilot:
+        await pilot.pause()
+        screen = app.screen
+        screen._switch_center_tab("sql")
+        await pilot.pause()
+        screen.query_one("#sql-result", ResultTable).focus()
+        await pilot.pause()
+        await pilot.press("slash")
+        await pilot.pause()
+
+        assert screen.focused is screen.query_one("#sql-editor", TextArea)
+
+
+@pytest.mark.asyncio
 async def test_slash_focuses_where_input():
-    """When not on SchemaTree, slash should focus where-input."""
+    """Tables 表示で ResultTable にフォーカスがあるとき / は where-input へ。"""
     app = SearchTestApp()
 
     async with app.run_test() as pilot:

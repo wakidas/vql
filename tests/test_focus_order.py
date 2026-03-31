@@ -2,9 +2,6 @@ import pytest
 from textual.binding import Binding
 
 from vql.screens.main import MainScreen
-from vql.widgets.schema_tree import SchemaTree
-from vql.widgets.result_table import ResultTable
-from vql.widgets.property_panel import PropertyPanel
 
 
 def test_main_screen_has_tab_binding():
@@ -21,7 +18,7 @@ def test_main_screen_has_shift_tab_binding():
     assert bindings["shift+tab"].action == "focus_previous"
 
 
-def test_focus_order_is_tree_table_property():
+def test_focus_order_is_left_and_center_only():
     screen = MainScreen()
     order = screen._focus_order()
-    assert order == [SchemaTree, ResultTable, PropertyPanel]
+    assert order == ["left", "center"]

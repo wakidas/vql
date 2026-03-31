@@ -5,6 +5,7 @@ from textual.app import App, ComposeResult
 from textual.widgets import Input, TextArea
 
 from vql.screens.main import MainScreen
+from vql.widgets.result_table import ResultTable
 from vql.widgets.tab_bar import TabBar
 
 
@@ -158,7 +159,7 @@ async def test_switching_center_tabs_moves_focus_to_visible_result_widget():
         await pilot.pause()
         screen._switch_center_tab("sql")
         await pilot.pause()
-        assert screen.focused is screen.query_one("#sql-editor", TextArea)
+        assert screen.focused is screen.query_one("#sql-result", ResultTable)
         screen.query_one("#sql-result").focus()
         await pilot.pause()
         screen._switch_center_tab("tables")
@@ -214,3 +215,48 @@ async def test_tables_mode_shows_main_container():
         screen = app.query_one(MainScreen)
         assert screen.query_one("#main-container").display is True
         assert screen.query_one("#sql-container").display is False
+
+
+@pytest.mark.asyncio
+async def test_tab_cycles_between_left_and_middle_only():
+    app = TabSwitchTestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.query_one(MainScreen)
+        screen.query_one("#sidebar").focus()
+        await pilot.pause()
+        await pilot.press("tab")
+        await pilot.pause()
+        assert screen.focused is screen.query_one("#main")
+        await pilot.press("tab")
+        await pilot.pause()
+        assert screen.focused is screen.query_one("#sidebar")
+        assert screen.focused is not screen.query_one("#property")
+
+
+@pytest.mark.asyncio
+async def test_shift_tab_from_property_returns_to_middle_panel():
+    app = TabSwitchTestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.query_one(MainScreen)
+        screen.query_one("#property").focus()
+        await pilot.pause()
+        await pilot.press("shift+tab")
+        await pilot.pause()
+        assert screen.focused is screen.query_one("#main")
+
+
+@pytest.mark.asyncio
+async def test_tab_uses_visible_history_panel_when_sidebar_tab_is_history():
+    app = TabSwitchTestApp()
+    async with app.run_test(size=(120, 40)) as pilot:
+        await pilot.pause()
+        screen = app.query_one(MainScreen)
+        screen._switch_sidebar_tab("history")
+        await pilot.pause()
+        screen.query_one("#main").focus()
+        await pilot.pause()
+        await pilot.press("tab")
+        await pilot.pause()
+        assert screen.focused is screen.query_one("#sql-history")

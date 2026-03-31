@@ -7,6 +7,7 @@ from textual.binding import Binding
 from textual.containers import Horizontal, Vertical
 from textual.events import Key
 from textual.screen import Screen
+from textual.widget import Widget
 from textual.widgets import DataTable, Header, Input, Static, TextArea, Tree
 from psycopg import sql
 from psycopg.types.json import Json, Jsonb
@@ -385,6 +386,9 @@ class MainScreen(Screen):
             self._update_search_label()
 
     def action_search(self) -> None:
+        if self._active_center_tab == "sql":
+            self.query_one("#sql-editor", SqlEditor).focus()
+            return
         if self._current_table is None:
             return
         self.query_one("#where-input", Input).focus()
@@ -446,7 +450,7 @@ class MainScreen(Screen):
             self.query_one("#where-input", Input),
             self.query_one("#main", ResultTable),
         }:
-            self.query_one("#sql-editor", SqlEditor).focus()
+            self.query_one("#sql-result", ResultTable).focus()
         elif tab == "tables" and previous_focus in {
             self.query_one("#sql-editor", SqlEditor),
             self.query_one("#sql-result", ResultTable),
@@ -679,26 +683,43 @@ class MainScreen(Screen):
     def action_focus_property(self) -> None:
         self.query_one(PropertyPanel).focus()
 
-    def _focus_order(self) -> list[type]:
-        return [SchemaTree, ResultTable, PropertyPanel]
+    def _active_sidebar_widget(self) -> Widget:
+        if self._active_sidebar_tab == "tables":
+            return self.query_one(SchemaTree)
+        return self.query_one(SqlHistoryList)
+
+    def _focus_order(self) -> list[str]:
+        return ["left", "center"]
+
+    def _focus_slot(self) -> str | None:
+        if isinstance(self.focused, (SchemaTree, SqlHistoryList)):
+            return "left"
+        if isinstance(self.focused, ResultTable):
+            return "center"
+        return None
+
+    def _focus_target(self, slot: str) -> Widget:
+        if slot == "left":
+            return self._active_sidebar_widget()
+        return self._active_result_table()
 
     def action_focus_next(self) -> None:
         order = self._focus_order()
-        try:
-            idx = next(i for i, cls in enumerate(order) if isinstance(self.focused, cls))
-            next_idx = (idx + 1) % len(order)
-        except (StopIteration, TypeError):
+        current = self._focus_slot()
+        if current is None:
             next_idx = 0
-        self.query_one(order[next_idx]).focus()
+        else:
+            next_idx = (order.index(current) + 1) % len(order)
+        self._focus_target(order[next_idx]).focus()
 
     def action_focus_previous(self) -> None:
         order = self._focus_order()
-        try:
-            idx = next(i for i, cls in enumerate(order) if isinstance(self.focused, cls))
-            prev_idx = (idx - 1) % len(order)
-        except (StopIteration, TypeError):
-            prev_idx = 0
-        self.query_one(order[prev_idx]).focus()
+        current = self._focus_slot()
+        if current is None:
+            prev_idx = len(order) - 1
+        else:
+            prev_idx = (order.index(current) - 1) % len(order)
+        self._focus_target(order[prev_idx]).focus()
 
     def action_connect(self) -> None:
         from vql.screens.connect import ConnectionList
