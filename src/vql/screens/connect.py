@@ -122,7 +122,7 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
         height: auto;
     }
     NewConnectionForm Input {
-        padding: 0 2;
+        padding: 0 1;
     }
     NewConnectionForm Label {
         margin-top: 1;
@@ -143,17 +143,17 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
             with VerticalScroll(id="form-fields"):
                 yield Static("New Connection", id="title")
                 yield Label("Name")
-                yield Input(placeholder="my-local-db", id="name")
+                yield Input(placeholder="my-local-db", id="name", compact=True)
                 yield Label("Host")
-                yield Input(value="localhost", id="host")
+                yield Input(value="localhost", placeholder="localhost", id="host", compact=True)
                 yield Label("Port")
-                yield Input(value="5432", id="port")
+                yield Input(value="5432", placeholder="5432", id="port", compact=True)
                 yield Label("Database")
-                yield Input(placeholder="mydb", id="database")
+                yield Input(placeholder="mydb", id="database", compact=True)
                 yield Label("User")
-                yield Input(value="postgres", id="user")
+                yield Input(value="postgres", placeholder="postgres", id="user", compact=True)
                 yield Label("Password")
-                yield Input(password=True, id="password")
+                yield Input(password=True, placeholder="(optional)", id="password", compact=True)
             with Horizontal(id="buttons"):
                 yield Button("Save", variant="primary", id="save")
                 yield Button("Cancel", id="cancel")
@@ -161,6 +161,7 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
 
     def on_mount(self) -> None:
         # Fixed rows: border(2) + padding(2) + buttons margin+height(4) + hint margin+height(2) = 10
+        # Inputs are compact (height=1 each), so form fields are much smaller than before
         max_form_h = max(6, self.app.size.height - 12)
         self.query_one("#form-fields").styles.max_height = max_form_h
 
