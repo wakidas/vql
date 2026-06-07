@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from textual.app import App
+from textual.events import Key
+from textual.widgets import Input, TextArea
 
 from vql.db.config import ConnectionConfig
 from vql.db.postgres import PostgresAdapter
@@ -56,6 +58,11 @@ class TuiClientApp(App):
         from vql.widgets.db_header import DbHeader
         self._main_screen.query_one(DbHeader).set_db_name(config.name, detail)
         await self._main_screen._load_schema()
+
+    def on_key(self, event: Key) -> None:
+        if event.key == "q" and not isinstance(self.focused, (Input, TextArea)):
+            self.exit()
+            event.prevent_default()
 
     async def on_unmount(self) -> None:
         if self.adapter:
