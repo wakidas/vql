@@ -104,7 +104,7 @@ class ConnectionList(ModalScreen[ConnectionConfig | None]):
 
 class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
     BINDINGS = [
-        Binding("escape", "cancel", "Cancel"),
+        Binding("escape", "cancel", "Cancel", priority=True),
     ]
 
     DEFAULT_CSS = """
@@ -123,6 +123,11 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
     NewConnectionForm #buttons {
         margin-top: 1;
         align: center middle;
+    }
+    NewConnectionForm #shortcut-hint {
+        color: $text-muted;
+        text-align: center;
+        margin-top: 1;
     }
     """
 
@@ -144,6 +149,7 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
             with Horizontal(id="buttons"):
                 yield Button("Save", variant="primary", id="save")
                 yield Button("Cancel", id="cancel")
+            yield Static("Tab Next   Shift+Tab Prev   Esc Cancel", id="shortcut-hint")
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
