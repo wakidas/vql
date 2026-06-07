@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from textual.app import ComposeResult
 from textual.binding import Binding
-from textual.containers import Vertical, Horizontal
+from textual.containers import Vertical, VerticalScroll, Horizontal
 from textual.screen import ModalScreen
 from textual.widgets import Input, Label, Button, Static
 
@@ -111,11 +111,18 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
     NewConnectionForm {
         align: center middle;
     }
-    NewConnectionForm > Vertical {
+    NewConnectionForm #modal-outer {
         width: 60;
+        height: auto;
         border: solid $accent;
         background: $surface;
         padding: 1 2;
+    }
+    NewConnectionForm #form-fields {
+        height: auto;
+    }
+    NewConnectionForm Input {
+        padding: 0 2;
     }
     NewConnectionForm Label {
         margin-top: 1;
@@ -132,24 +139,30 @@ class NewConnectionForm(ModalScreen[ConnectionConfig | None]):
     """
 
     def compose(self) -> ComposeResult:
-        with Vertical():
-            yield Static("New Connection", id="title")
-            yield Label("Name")
-            yield Input(placeholder="my-local-db", id="name")
-            yield Label("Host")
-            yield Input(value="localhost", id="host")
-            yield Label("Port")
-            yield Input(value="5432", id="port")
-            yield Label("Database")
-            yield Input(placeholder="mydb", id="database")
-            yield Label("User")
-            yield Input(value="postgres", id="user")
-            yield Label("Password")
-            yield Input(password=True, id="password")
+        with Vertical(id="modal-outer"):
+            with VerticalScroll(id="form-fields"):
+                yield Static("New Connection", id="title")
+                yield Label("Name")
+                yield Input(placeholder="my-local-db", id="name")
+                yield Label("Host")
+                yield Input(value="localhost", id="host")
+                yield Label("Port")
+                yield Input(value="5432", id="port")
+                yield Label("Database")
+                yield Input(placeholder="mydb", id="database")
+                yield Label("User")
+                yield Input(value="postgres", id="user")
+                yield Label("Password")
+                yield Input(password=True, id="password")
             with Horizontal(id="buttons"):
                 yield Button("Save", variant="primary", id="save")
                 yield Button("Cancel", id="cancel")
             yield Static("Tab Next   Shift+Tab Prev   Esc Cancel", id="shortcut-hint")
+
+    def on_mount(self) -> None:
+        # Fixed rows: border(2) + padding(2) + buttons margin+height(4) + hint margin+height(2) = 10
+        max_form_h = max(6, self.app.size.height - 12)
+        self.query_one("#form-fields").styles.max_height = max_form_h
 
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "save":
