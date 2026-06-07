@@ -36,6 +36,7 @@ class MainScreen(Screen):
         Binding("semicolon", "focus_property", "Property", show=True),
         Binding("c", "connect", "Connect", show=True),
         Binding("r", "refresh", "Refresh", show=True),
+        Binding("q", "quit", "Quit", show=True),
         Binding("colon", "command_input", "Command", show=False),
         Binding("slash", "search", "Search", show=False),
     ]
