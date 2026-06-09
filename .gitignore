@@ -11,3 +11,7 @@ wheels/
 
 # local documents
 docs/local/
+
+.claude/skills/pr-review
+
+.serena
