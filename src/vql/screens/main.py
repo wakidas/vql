@@ -244,8 +244,17 @@ class MainScreen(Screen):
         await tree.load_tables(self.adapter)
         self._set_status_text("Connected")
 
+    async def on_tree_node_highlighted(self, event: Tree.NodeHighlighted) -> None:
+        await self._preview_table(event.node.data)
+
     async def on_tree_node_selected(self, event: Tree.NodeSelected) -> None:
         table = event.node.data
+        if table is None or self.adapter is None:
+            return
+        self._switch_center_tab("tables")
+        self.query_one("#main", ResultTable).focus()
+
+    async def _preview_table(self, table: Table | None) -> None:
         if table is None or self.adapter is None:
             return
         self._current_table = table
@@ -267,7 +276,6 @@ class MainScreen(Screen):
             column_types=self._column_types_for(result.columns),
         )
         self._switch_center_tab("tables")
-        self.query_one("#main", ResultTable).focus()
 
     def _active_result_table(self) -> ResultTable:
         if self._active_center_tab == "sql":
